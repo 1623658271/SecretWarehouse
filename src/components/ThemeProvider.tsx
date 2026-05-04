@@ -63,8 +63,15 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [theme])
 
   const setTheme = (newTheme: Theme) => {
+    // Add transition class for smooth theme change
+    document.documentElement.classList.add('theme-transition')
     localStorage.setItem('theme', newTheme)
     setThemeState(newTheme)
+
+    // Remove transition class after animation completes
+    setTimeout(() => {
+      document.documentElement.classList.remove('theme-transition')
+    }, 300)
   }
 
   return (

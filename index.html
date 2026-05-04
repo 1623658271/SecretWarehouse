@@ -5,6 +5,52 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SecretWarehouse</title>
+    <style>
+      /* 全局样式重置 */
+      html, body, #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      /* 自定义滚动条样式 */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;
+      }
+      *::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      *::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      *::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+      .dark * {
+        scrollbar-color: #475569 transparent;
+      }
+      .dark *::-webkit-scrollbar-thumb {
+        background: #475569;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+      .dark *::-webkit-scrollbar-thumb:hover {
+        background: #64748b;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

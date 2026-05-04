@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/tauri'
-import { SecretEntry, CreateSecretRequest, UpdateSecretRequest } from '../types'
+import { SecretEntry, CreateSecretRequest, UpdateSecretRequest, Template, CreateTemplateRequest, UpdateTemplateRequest } from '../types'
 
 interface AppState {
   // State
@@ -14,12 +14,23 @@ interface AppState {
   showForm: boolean
   editingSecret: SecretEntry | null
 
+  // Multi-select
+  selectedIds: Set<string>
+  isSelectionMode: boolean
+
+  // Templates
+  templates: Template[]
+  showTemplates: boolean
+  showTemplateForm: boolean
+  editingTemplate: Template | null
+
   // Actions
   fetchSecrets: (tag?: string) => Promise<void>
   fetchAllTags: () => Promise<void>
   createSecret: (req: CreateSecretRequest) => Promise<void>
   updateSecret: (req: UpdateSecretRequest) => Promise<SecretEntry>
   deleteSecret: (id: string) => Promise<void>
+  deleteSecrets: (ids: string[]) => Promise<number>
   searchSecrets: (query: string) => Promise<void>
   selectSecret: (secret: SecretEntry | null) => void
   selectTag: (tag: string | null) => void
@@ -27,6 +38,22 @@ interface AppState {
   setShowForm: (show: boolean) => void
   setEditingSecret: (secret: SecretEntry | null) => void
   generatePassword: (length?: number) => Promise<string>
+  generateTestData: () => Promise<number>
+
+  // Multi-select actions
+  toggleSelection: (id: string) => void
+  selectAll: () => void
+  clearSelection: () => void
+  setSelectionMode: (mode: boolean) => void
+
+  // Template actions
+  fetchTemplates: () => Promise<void>
+  createTemplate: (req: CreateTemplateRequest) => Promise<void>
+  updateTemplate: (req: UpdateTemplateRequest) => Promise<Template>
+  deleteTemplate: (id: string) => Promise<void>
+  setShowTemplates: (show: boolean) => void
+  setShowTemplateForm: (show: boolean) => void
+  setEditingTemplate: (template: Template | null) => void
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -40,10 +67,19 @@ export const useStore = create<AppState>((set, get) => ({
   showForm: false,
   editingSecret: null,
 
+  // Multi-select
+  selectedIds: new Set(),
+  isSelectionMode: false,
+
+  // Templates
+  templates: [],
+  showTemplates: false,
+  showTemplateForm: false,
+  editingTemplate: null,
+
   fetchSecrets: async (tag?: string) => {
     set({ isLoading: true, error: null })
     try {
-      // 处理收藏夹筛选
       const isFavorite = tag === 'favorite'
       const secrets = await invoke<SecretEntry[]>('list_secrets', {
         tag: isFavorite ? null : (tag || null),
@@ -51,8 +87,7 @@ export const useStore = create<AppState>((set, get) => ({
         limit: null,
         offset: null,
       })
-      set({ secrets, isLoading: false })
-      // 更新所有标签
+      set({ secrets, isLoading: false, selectedIds: new Set(), isSelectionMode: false })
       get().fetchAllTags()
     } catch (err) {
       set({ error: String(err), isLoading: false })
@@ -71,14 +106,14 @@ export const useStore = create<AppState>((set, get) => ({
   createSecret: async (req: CreateSecretRequest) => {
     set({ isLoading: true, error: null })
     try {
-      console.log('Creating secret with:', req)
       const secret = await invoke<SecretEntry>('create_secret', {
         title: req.title,
+        description: req.description || '',
         fields: req.fields,
+        sensitiveFields: req.sensitiveFields || null,
         tags: req.tags || null,
         icon: req.icon || 'key',
       })
-      console.log('Created secret:', secret)
       set((state) => ({
         secrets: [secret, ...state.secrets],
         isLoading: false,
@@ -87,7 +122,6 @@ export const useStore = create<AppState>((set, get) => ({
       }))
       get().fetchAllTags()
     } catch (err) {
-      console.error('Create secret error:', err)
       set({ error: String(err), isLoading: false })
     }
   },
@@ -98,13 +132,13 @@ export const useStore = create<AppState>((set, get) => ({
       const secret = await invoke<SecretEntry>('update_secret', {
         id: req.id,
         title: req.title || null,
+        description: req.description || null,
         fields: req.fields || null,
+        sensitiveFields: req.sensitiveFields || null,
         tags: req.tags || null,
         icon: req.icon || null,
         favorite: req.favorite !== undefined ? req.favorite : null,
       })
-      // 只更新 secrets 列表，不更新 selectedSecret
-      // selectedSecret 会在 SecretDetail 的 effect 中自动同步
       set((state) => ({
         secrets: state.secrets.map((s) => (s.id === secret.id ? secret : s)),
         isLoading: false,
@@ -132,6 +166,25 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  deleteSecrets: async (ids: string[]) => {
+    set({ isLoading: true, error: null })
+    try {
+      const count = await invoke<number>('delete_secrets', { ids })
+      set((state) => ({
+        secrets: state.secrets.filter((s) => !ids.includes(s.id)),
+        selectedSecret: ids.includes(state.selectedSecret?.id || '') ? null : state.selectedSecret,
+        selectedIds: new Set(),
+        isSelectionMode: false,
+        isLoading: false,
+      }))
+      get().fetchAllTags()
+      return count
+    } catch (err) {
+      set({ error: String(err), isLoading: false })
+      throw err
+    }
+  },
+
   searchSecrets: async (query: string) => {
     if (!query.trim()) {
       set({ searchQuery: '' })
@@ -141,7 +194,6 @@ export const useStore = create<AppState>((set, get) => ({
     set({ isLoading: true, error: null, searchQuery: query })
     try {
       const secrets = await invoke<SecretEntry[]>('search_secrets', { query })
-      // 只有当搜索词仍然是当前查询时才更新结果（防止竞态条件）
       if (get().searchQuery === query) {
         set({ secrets, isLoading: false })
       }
@@ -155,7 +207,7 @@ export const useStore = create<AppState>((set, get) => ({
   selectSecret: (secret) => set({ selectedSecret: secret }),
 
   selectTag: (tag) => {
-    set({ selectedTag: tag })
+    set({ selectedTag: tag, searchQuery: '' })
     get().fetchSecrets(tag || undefined)
   },
 
@@ -172,4 +224,109 @@ export const useStore = create<AppState>((set, get) => ({
       throw new Error(String(err))
     }
   },
+
+  generateTestData: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const count = await invoke<number>('generate_test_data')
+      await get().fetchSecrets()
+      set({ isLoading: false })
+      return count
+    } catch (err) {
+      set({ error: String(err), isLoading: false })
+      throw err
+    }
+  },
+
+  // Multi-select actions
+  toggleSelection: (id) => set((state) => {
+    const newSet = new Set(state.selectedIds)
+    if (newSet.has(id)) {
+      newSet.delete(id)
+    } else {
+      newSet.add(id)
+    }
+    return { selectedIds: newSet, isSelectionMode: newSet.size > 0 || state.isSelectionMode }
+  }),
+
+  selectAll: () => set((state) => ({
+    selectedIds: new Set(state.secrets.map(s => s.id)),
+    isSelectionMode: true,
+  })),
+
+  clearSelection: () => set({ selectedIds: new Set(), isSelectionMode: false }),
+
+  setSelectionMode: (mode) => set({ isSelectionMode: mode, selectedIds: mode ? get().selectedIds : new Set() }),
+
+  // Template actions
+  fetchTemplates: async () => {
+    try {
+      const templates = await invoke<Template[]>('list_templates')
+      set({ templates })
+    } catch (err) {
+      console.error('Failed to fetch templates:', err)
+    }
+  },
+
+  createTemplate: async (req: CreateTemplateRequest) => {
+    set({ isLoading: true, error: null })
+    try {
+      const template = await invoke<Template>('create_template', {
+        name: req.name,
+        description: req.description || '',
+        fields: req.fields,
+        tags: req.tags || null,
+        icon: req.icon || 'key',
+      })
+      set((state) => ({
+        templates: [template, ...state.templates],
+        isLoading: false,
+        showTemplateForm: false,
+        editingTemplate: null,
+      }))
+    } catch (err) {
+      set({ error: String(err), isLoading: false })
+    }
+  },
+
+  updateTemplate: async (req: UpdateTemplateRequest) => {
+    set({ isLoading: true, error: null })
+    try {
+      const template = await invoke<Template>('update_template', {
+        id: req.id,
+        name: req.name || null,
+        description: req.description || null,
+        fields: req.fields || null,
+        tags: req.tags || null,
+        icon: req.icon || null,
+      })
+      set((state) => ({
+        templates: state.templates.map((t) => (t.id === template.id ? template : t)),
+        isLoading: false,
+      }))
+      return template
+    } catch (err) {
+      set({ error: String(err), isLoading: false })
+      throw err
+    }
+  },
+
+  deleteTemplate: async (id: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      await invoke<boolean>('delete_template', { id })
+      set((state) => ({
+        templates: state.templates.filter((t) => t.id !== id),
+        isLoading: false,
+      }))
+    } catch (err) {
+      set({ error: String(err), isLoading: false })
+    }
+  },
+
+  setShowTemplates: (show) => set({ showTemplates: show }),
+
+  setShowTemplateForm: (show) => set({ showTemplateForm: show, editingTemplate: show ? get().editingTemplate : null }),
+
+  setEditingTemplate: (template) => set({ editingTemplate: template, showTemplateForm: template !== null }),
 }))

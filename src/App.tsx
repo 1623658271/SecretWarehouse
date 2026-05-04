@@ -6,10 +6,17 @@ import SearchBar from './components/SearchBar'
 import SecretList from './components/SecretList'
 import SecretDetail from './components/SecretDetail'
 import SecretForm from './components/SecretForm'
+import TemplateList from './components/TemplateList'
+import TemplateForm from './components/TemplateForm'
 
 function AppContent() {
   const fetchSecrets = useStore((s) => s.fetchSecrets)
   const showForm = useStore((s) => s.showForm)
+  const selectedSecret = useStore((s) => s.selectedSecret)
+  const showTemplates = useStore((s) => s.showTemplates)
+  const showTemplateForm = useStore((s) => s.showTemplateForm)
+  const setShowTemplates = useStore((s) => s.setShowTemplates)
+  const setShowForm = useStore((s) => s.setShowForm)
   const initialized = useRef(false)
 
   useEffect(() => {
@@ -19,17 +26,28 @@ function AppContent() {
     }
   }, [fetchSecrets])
 
+  const handleSelectTemplate = (template: any) => {
+    setShowTemplates(false)
+    // Open form with template data - this is handled by SecretForm
+    // We need to pass the template data somehow
+    // For now, we'll use a temporary approach
+    useStore.getState().setEditingSecret(null)
+    setShowForm(true)
+    // Store the selected template for SecretForm to use
+    ;(window as any).__selectedTemplate = template
+  }
+
   return (
-    <div className="flex h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-white transition-colors">
+    <div className="flex h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <SearchBar />
-        <div className="flex-1 flex overflow-hidden">
-          <SecretList />
-          <SecretDetail />
-        </div>
+        <SecretList />
       </div>
+      {selectedSecret && <SecretDetail />}
       {showForm && <SecretForm />}
+      {showTemplates && <TemplateList onSelectTemplate={handleSelectTemplate} />}
+      {showTemplateForm && <TemplateForm />}
     </div>
   )
 }

@@ -1,11 +1,14 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretEntry {
     pub id: String,
     pub title: String,
-    pub fields: HashMap<String, String>,
+    pub description: String,
+    pub fields: IndexMap<String, String>,
+    #[serde(default, rename = "sensitiveFields")]
+    pub sensitive_fields: Vec<String>,
     pub tags: Vec<String>,
     pub icon: String,
     pub created_at: i64,
@@ -16,7 +19,11 @@ pub struct SecretEntry {
 #[derive(Debug, Deserialize)]
 pub struct CreateSecretRequest {
     pub title: String,
-    pub fields: HashMap<String, String>,
+    #[serde(default)]
+    pub description: String,
+    pub fields: IndexMap<String, String>,
+    #[serde(default, rename = "sensitiveFields")]
+    pub sensitive_fields: Vec<String>,
     #[serde(default)]
     pub tags: Vec<String>,
     #[serde(default = "default_icon")]
@@ -31,7 +38,10 @@ fn default_icon() -> String {
 pub struct UpdateSecretRequest {
     pub id: String,
     pub title: Option<String>,
-    pub fields: Option<HashMap<String, String>>,
+    pub description: Option<String>,
+    pub fields: Option<IndexMap<String, String>>,
+    #[serde(rename = "sensitiveFields")]
+    pub sensitive_fields: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
     pub icon: Option<String>,
     pub favorite: Option<bool>,
@@ -45,16 +55,36 @@ pub struct ListSecretsRequest {
     pub offset: Option<i64>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SearchRequest {
-    pub query: String,
+// 模板相关
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Template {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub fields: Vec<String>,  // 字段名列表
+    pub tags: Vec<String>,
+    pub icon: String,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GeneratePasswordRequest {
-    pub length: Option<usize>,
-    pub use_upper: Option<bool>,
-    pub use_lower: Option<bool>,
-    pub use_digits: Option<bool>,
-    pub use_symbols: Option<bool>,
+pub struct CreateTemplateRequest {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub fields: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default = "default_icon")]
+    pub icon: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateTemplateRequest {
+    pub id: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub fields: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    pub icon: Option<String>,
 }

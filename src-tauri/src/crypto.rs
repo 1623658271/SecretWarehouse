@@ -3,6 +3,7 @@ use aes_gcm::{
     Aes256Gcm, AeadCore, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use indexmap::IndexMap;
 
 /// 开发模式固定密钥（32字节）
 const DEV_KEY: &[u8; 32] = b"dev_key_32_bytes_for_testing_!!1";
@@ -50,20 +51,20 @@ pub fn decrypt_value(encoded: &str, key: &[u8; 32]) -> Result<String, String> {
     String::from_utf8(plaintext).map_err(|e| format!("UTF-8 解码失败: {}", e))
 }
 
-/// 加密整个 HashMap<String, String>
+/// 加密整个 IndexMap<String, String>
 pub fn encrypt_fields(
-    fields: &std::collections::HashMap<String, String>,
+    fields: &IndexMap<String, String>,
     key: &[u8; 32],
 ) -> Result<String, String> {
     let json = serde_json::to_string(fields).map_err(|e| e.to_string())?;
     encrypt_value(&json, key)
 }
 
-/// 解密到 HashMap<String, String>
+/// 解密到 IndexMap<String, String>
 pub fn decrypt_fields(
     encrypted: &str,
     key: &[u8; 32],
-) -> Result<std::collections::HashMap<String, String>, String> {
+) -> Result<IndexMap<String, String>, String> {
     let json = decrypt_value(encrypted, key)?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
@@ -84,7 +85,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt_fields() {
         let key = get_encryption_key();
-        let mut fields = std::collections::HashMap::new();
+        let mut fields = IndexMap::new();
         fields.insert("password".to_string(), "super_secret_123".to_string());
         fields.insert("username".to_string(), "admin".to_string());
 

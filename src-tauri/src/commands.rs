@@ -1,5 +1,6 @@
 use crate::db::DbState;
 use crate::models::*;
+use indexmap::IndexMap;
 use rand::Rng;
 use tauri::State;
 
@@ -7,13 +8,17 @@ use tauri::State;
 pub fn create_secret(
     state: State<'_, DbState>,
     title: String,
-    fields: std::collections::HashMap<String, String>,
+    description: Option<String>,
+    fields: IndexMap<String, String>,
+    sensitive_fields: Option<Vec<String>>,
     tags: Option<Vec<String>>,
     icon: Option<String>,
 ) -> Result<SecretEntry, String> {
     let req = CreateSecretRequest {
         title,
+        description: description.unwrap_or_default(),
         fields,
+        sensitive_fields: sensitive_fields.unwrap_or_default(),
         tags: tags.unwrap_or_default(),
         icon: icon.unwrap_or_else(|| "key".to_string()),
     };
@@ -47,7 +52,9 @@ pub fn update_secret(
     state: State<'_, DbState>,
     id: String,
     title: Option<String>,
-    fields: Option<std::collections::HashMap<String, String>>,
+    description: Option<String>,
+    fields: Option<IndexMap<String, String>>,
+    sensitive_fields: Option<Vec<String>>,
     tags: Option<Vec<String>>,
     icon: Option<String>,
     favorite: Option<bool>,
@@ -55,7 +62,9 @@ pub fn update_secret(
     let req = UpdateSecretRequest {
         id,
         title,
+        description,
         fields,
+        sensitive_fields,
         tags,
         icon,
         favorite,
@@ -109,4 +118,178 @@ pub fn generate_password(
         .collect();
 
     Ok(password)
+}
+
+#[tauri::command]
+pub fn generate_test_data(state: State<'_, DbState>) -> Result<i32, String> {
+    use rand::seq::SliceRandom;
+
+    let mut rng = rand::thread_rng();
+
+    let titles = [
+        "GitHub", "Gmail", "淘宝", "京东", "微信", "支付宝", "百度", "微博",
+        "知乎", "B站", "网易云音乐", "QQ", "抖音", "美团", "饿了么", "滴滴",
+        "银行账户", "公司邮箱", "VPN账号", "服务器SSH", "数据库", "AWS控制台",
+        "阿里云", "腾讯云", "Cloudflare", "Docker Hub", "npm", "PyPI",
+        "Apple ID", "微软账号", "谷歌账号", "亚马逊", "Netflix", "Spotify",
+        "Steam", "Epic Games", "PlayStation", "Xbox", "Nintendo",
+    ];
+
+    let descriptions = [
+        "个人账号，日常使用",
+        "工作账号，注意安全",
+        "重要账户，定期更换密码",
+        "测试账号",
+        "备用账号",
+        "家庭共享账号",
+        "开发者账号，用于发布应用",
+        "云服务账号，存储项目数据",
+        "娱乐账号，订阅服务",
+        "游戏账号，绑定支付方式",
+    ];
+
+    let tags_pool = [
+        "工作", "个人", "社交", "购物", "娱乐", "开发", "云服务",
+        "游戏", "金融", "邮箱", "工具", "学习",
+    ];
+
+    let icons = ["key", "globe", "credit-card", "lock", "shield", "mail", "server", "terminal"];
+
+    let user_names = ["admin", "user", "test", "demo", "root", "dev", "guest", "john", "mary", "alex"];
+    let domains = ["gmail.com", "qq.com", "163.com", "outlook.com", "hotmail.com", "company.com"];
+
+    let mut count = 0;
+
+    for i in 0..100 {
+        let title = titles.choose(&mut rng).unwrap().to_string();
+        let title = format!("{} {}", title, i + 1);
+
+        let description = if rng.gen_bool(0.7) {
+            descriptions.choose(&mut rng).unwrap().to_string()
+        } else {
+            String::new()
+        };
+
+        let mut fields = IndexMap::new();
+
+        // 用户名
+        let username = format!(
+            "{}{}@{}",
+            user_names.choose(&mut rng).unwrap(),
+            rng.gen_range(100..999),
+            domains.choose(&mut rng).unwrap()
+        );
+        fields.insert("用户名".to_string(), username);
+
+        // 密码
+        let pwd_len = rng.gen_range(12..24);
+        let password: String = (0..pwd_len)
+            .map(|_| {
+                let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+                chars[rng.gen_range(0..chars.len())] as char
+            })
+            .collect();
+        fields.insert("密码".to_string(), password.clone());
+
+        // 随机添加额外字段
+        if rng.gen_bool(0.5) {
+            fields.insert("备注".to_string(), format!("这是{}的备注信息", title));
+        }
+        if rng.gen_bool(0.3) {
+            fields.insert("API密钥".to_string(), format!("sk-{}", password));
+        }
+        if rng.gen_bool(0.2) {
+            fields.insert("手机号".to_string(), format!("1{:010}", rng.gen_range(0..9999999999u64)));
+        }
+
+        // 随机标签 (1-3个)
+        let num_tags = rng.gen_range(1..=3);
+        let selected_tags: Vec<String> = tags_pool
+            .choose_multiple(&mut rng, num_tags)
+            .map(|t| t.to_string())
+            .collect();
+
+        // 敏感字段列表
+        let mut sensitive_fields = vec!["密码".to_string()];
+        if fields.contains_key("API密钥") {
+            sensitive_fields.push("API密钥".to_string());
+        }
+
+        let icon = icons.choose(&mut rng).unwrap().to_string();
+
+        let req = CreateSecretRequest {
+            title,
+            description,
+            fields,
+            sensitive_fields,
+            tags: selected_tags,
+            icon,
+        };
+
+        if state.create_secret(req).is_ok() {
+            count += 1;
+        }
+    }
+
+    Ok(count)
+}
+
+#[tauri::command]
+pub fn delete_secrets(state: State<'_, DbState>, ids: Vec<String>) -> Result<usize, String> {
+    state.delete_secrets(&ids)
+}
+
+#[tauri::command]
+pub fn create_template(
+    state: State<'_, DbState>,
+    name: String,
+    description: Option<String>,
+    fields: Vec<String>,
+    tags: Option<Vec<String>>,
+    icon: Option<String>,
+) -> Result<Template, String> {
+    let req = CreateTemplateRequest {
+        name,
+        description: description.unwrap_or_default(),
+        fields,
+        tags: tags.unwrap_or_default(),
+        icon: icon.unwrap_or_else(|| "key".to_string()),
+    };
+    state.create_template(req)
+}
+
+#[tauri::command]
+pub fn get_template(state: State<'_, DbState>, id: String) -> Result<Template, String> {
+    state.get_template(&id)
+}
+
+#[tauri::command]
+pub fn list_templates(state: State<'_, DbState>) -> Result<Vec<Template>, String> {
+    state.list_templates()
+}
+
+#[tauri::command]
+pub fn update_template(
+    state: State<'_, DbState>,
+    id: String,
+    name: Option<String>,
+    description: Option<String>,
+    fields: Option<Vec<String>>,
+    tags: Option<Vec<String>>,
+    icon: Option<String>,
+) -> Result<Template, String> {
+    let req = UpdateTemplateRequest {
+        id,
+        name,
+        description,
+        fields,
+        tags,
+        icon,
+    };
+    state.update_template(req)
+}
+
+#[tauri::command]
+pub fn delete_template(state: State<'_, DbState>, id: String) -> Result<bool, String> {
+    state.delete_template(&id)
 }

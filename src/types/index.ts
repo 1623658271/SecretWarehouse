@@ -1,7 +1,9 @@
 export interface SecretEntry {
   id: string
   title: string
+  description: string
   fields: Record<string, string>  // 自由键值对
+  sensitiveFields: string[]  // 需要遮蔽的字段名列表
   tags: string[]
   icon: string  // 图标名称
   created_at: number
@@ -11,7 +13,9 @@ export interface SecretEntry {
 
 export interface CreateSecretRequest {
   title: string
+  description?: string
   fields: Record<string, string>
+  sensitiveFields?: string[]
   tags?: string[]
   icon?: string
 }
@@ -19,7 +23,9 @@ export interface CreateSecretRequest {
 export interface UpdateSecretRequest {
   id: string
   title?: string
+  description?: string
   fields?: Record<string, string>
+  sensitiveFields?: string[]
   tags?: string[]
   icon?: string
   favorite?: boolean
@@ -30,6 +36,34 @@ export interface ListSecretsRequest {
   favorite?: boolean
   limit?: number
   offset?: number
+}
+
+// 模板相关
+export interface Template {
+  id: string
+  name: string
+  description: string
+  fields: string[]  // 字段名列表
+  tags: string[]
+  icon: string
+  created_at: number
+}
+
+export interface CreateTemplateRequest {
+  name: string
+  description?: string
+  fields: string[]
+  tags?: string[]
+  icon?: string
+}
+
+export interface UpdateTemplateRequest {
+  id: string
+  name?: string
+  description?: string
+  fields?: string[]
+  tags?: string[]
+  icon?: string
 }
 
 // 可选的图标列表

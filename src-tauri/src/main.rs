@@ -21,9 +21,16 @@ fn main() {
             commands::list_secrets,
             commands::update_secret,
             commands::delete_secret,
+            commands::delete_secrets,
             commands::search_secrets,
             commands::get_all_tags,
             commands::generate_password,
+            commands::generate_test_data,
+            commands::create_template,
+            commands::get_template,
+            commands::list_templates,
+            commands::update_template,
+            commands::delete_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
