@@ -249,16 +249,17 @@ impl DbState {
         let key = crypto::get_encryption_key();
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
 
+        // 模糊匹配：标题或标签包含搜索词
+        let pattern = format!("%{}%", query);
         let sql = "
-            SELECT s.id, s.icon, s.title, s.encrypted_fields, s.tags, s.created_at, s.updated_at, s.favorite
-            FROM secrets s
-            INNER JOIN secrets_fts fts ON s.rowid = fts.rowid
-            WHERE secrets_fts MATCH ?
-            ORDER BY rank
+            SELECT id, icon, title, encrypted_fields, tags, created_at, updated_at, favorite
+            FROM secrets
+            WHERE title LIKE ?1 OR tags LIKE ?1
+            ORDER BY updated_at DESC
         ";
 
         let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
-        let rows = stmt.query_map(params![query], |row| {
+        let rows = stmt.query_map(params![pattern], |row| {
             let id: String = row.get(0)?;
             let icon: String = row.get(1)?;
             let title: String = row.get(2)?;
