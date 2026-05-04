@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useState } from 'react'
 import { useStore } from '../stores/useStore'
 import {
@@ -10,22 +9,17 @@ import { iconMap, iconColors } from '../constants/icons'
 const SENSITIVE_KEYWORDS = ['password', '密码', 'secret', '密钥', 'key', 'token', 'cvv', 'pin']
 
 export default function SecretDetail() {
-  const { selectedSecret, secrets, selectSecret, updateSecret, deleteSecret, setEditingSecret } = useStore()
+  const { selectedSecret, secrets, updateSecret, deleteSecret, setEditingSecret } = useStore()
   const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({})
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  // 当 secrets 更新时，同步 selectedSecret
-  useEffect(() => {
-    if (selectedSecret) {
-      const updated = secrets.find(s => s.id === selectedSecret.id)
-      if (updated && updated !== selectedSecret) {
-        selectSecret(updated)
-      }
-    }
-  }, [secrets, selectedSecret, selectSecret])
+  // 从 secrets 数组中获取最新的数据（如果有的话）
+  const currentSecret = selectedSecret
+    ? secrets.find(s => s.id === selectedSecret.id) || selectedSecret
+    : null
 
-  if (!selectedSecret) {
+  if (!currentSecret) {
     return (
       <div className="flex-1 flex items-center justify-center bg-white dark:bg-slate-900 transition-colors">
         <div className="text-center">
@@ -36,8 +30,8 @@ export default function SecretDetail() {
     )
   }
 
-  const Icon = iconMap[selectedSecret.icon] || Key
-  const gradientColor = iconColors[selectedSecret.icon] || 'from-yellow-400 to-amber-500'
+  const Icon = iconMap[currentSecret.icon] || Key
+  const gradientColor = iconColors[currentSecret.icon] || 'from-yellow-400 to-amber-500'
 
   const toggleSensitive = (field: string) => {
     setShowSensitive((prev) => ({ ...prev, [field]: !prev[field] }))
@@ -59,13 +53,13 @@ export default function SecretDetail() {
 
   const toggleFavorite = () => {
     updateSecret({
-      id: selectedSecret.id,
-      favorite: !selectedSecret.favorite,
+      id: currentSecret.id,
+      favorite: !currentSecret.favorite,
     })
   }
 
   const handleDelete = () => {
-    deleteSecret(selectedSecret.id)
+    deleteSecret(currentSecret.id)
     setShowDeleteConfirm(false)
   }
 
@@ -90,10 +84,10 @@ export default function SecretDetail() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-800 dark:text-white">
-                {selectedSecret.title}
+                {currentSecret.title}
               </h1>
               <p className="text-sm text-slate-400 mt-0.5">
-                {Object.keys(selectedSecret.fields).length} 个字段
+                {Object.keys(currentSecret.fields).length} 个字段
               </p>
             </div>
           </div>
@@ -101,16 +95,16 @@ export default function SecretDetail() {
             <button
               onClick={toggleFavorite}
               className={`p-2 rounded-lg transition-colors ${
-                selectedSecret.favorite
+                currentSecret.favorite
                   ? 'text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
                   : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
-              title={selectedSecret.favorite ? '取消收藏' : '添加收藏'}
+              title={currentSecret.favorite ? '取消收藏' : '添加收藏'}
             >
-              <Star className={`w-5 h-5 ${selectedSecret.favorite ? 'fill-current' : ''}`} />
+              <Star className={`w-5 h-5 ${currentSecret.favorite ? 'fill-current' : ''}`} />
             </button>
             <button
-              onClick={() => setEditingSecret(selectedSecret)}
+              onClick={() => setEditingSecret(currentSecret)}
               className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               title="编辑"
             >
@@ -127,9 +121,9 @@ export default function SecretDetail() {
         </div>
 
         {/* Tags */}
-        {selectedSecret.tags.length > 0 && (
+        {currentSecret.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">
-            {selectedSecret.tags.map((tag) => (
+            {currentSecret.tags.map((tag) => (
               <span
                 key={tag}
                 className="px-2.5 py-1 text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-md"
@@ -142,7 +136,7 @@ export default function SecretDetail() {
 
         {/* Fields */}
         <div className="space-y-4 mb-6">
-          {Object.entries(selectedSecret.fields).map(([key, value]) => {
+          {Object.entries(currentSecret.fields).map(([key, value]) => {
             const isSensitive = isFieldSensitive(key)
             const isVisible = showSensitive[key]
 
@@ -199,11 +193,11 @@ export default function SecretDetail() {
           <div className="flex items-center gap-6 text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              <span>创建: {formatDate(selectedSecret.created_at)}</span>
+              <span>创建: {formatDate(currentSecret.created_at)}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              <span>更新: {formatDate(selectedSecret.updated_at)}</span>
+              <span>更新: {formatDate(currentSecret.updated_at)}</span>
             </div>
           </div>
         </div>
@@ -219,7 +213,7 @@ export default function SecretDetail() {
                 确认删除
               </h3>
               <p className="text-sm text-slate-500 mb-6">
-                确定要删除 "{selectedSecret.title}" 吗？此操作无法撤回。
+                确定要删除 "{currentSecret.title}" 吗？此操作无法撤回。
               </p>
               <div className="flex gap-3">
                 <button
