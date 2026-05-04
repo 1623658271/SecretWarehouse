@@ -69,12 +69,14 @@ export const useStore = create<AppState>((set, get) => ({
   createSecret: async (req: CreateSecretRequest) => {
     set({ isLoading: true, error: null })
     try {
+      console.log('Creating secret with:', req)
       const secret = await invoke<SecretEntry>('create_secret', {
         title: req.title,
         fields: req.fields,
-        tags: req.tags || [],
+        tags: req.tags || null,
         icon: req.icon || 'key',
       })
+      console.log('Created secret:', secret)
       set((state) => ({
         secrets: [secret, ...state.secrets],
         isLoading: false,
@@ -83,6 +85,7 @@ export const useStore = create<AppState>((set, get) => ({
       }))
       get().fetchAllTags()
     } catch (err) {
+      console.error('Create secret error:', err)
       set({ error: String(err), isLoading: false })
     }
   },

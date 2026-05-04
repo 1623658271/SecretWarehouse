@@ -24,7 +24,11 @@ export default function SecretForm() {
   const [generatingField, setGeneratingField] = useState<number | null>(null)
 
   const handleSubmit = async () => {
-    if (!title.trim()) return
+    console.log('handleSubmit called, title:', title)
+    if (!title.trim()) {
+      console.log('Title is empty, returning')
+      return
+    }
 
     // 构建 fields 对象
     const fieldsObj: Record<string, string> = {}
@@ -38,6 +42,8 @@ export default function SecretForm() {
       .split(',')
       .map(t => t.trim())
       .filter(Boolean)
+
+    console.log('Submitting:', { title, fields: fieldsObj, tags: tagsArray, icon })
 
     if (editingSecret) {
       await updateSecret({
