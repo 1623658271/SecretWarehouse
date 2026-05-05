@@ -42,6 +42,8 @@ fn main() {
             commands::has_recovery_key,
             commands::unlock_with_recovery_code,
             commands::reset_password_with_recovery,
+            commands::export_user_data,
+            commands::import_user_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -463,3 +463,128 @@ pub fn reset_password_with_recovery(state: State<'_, DbState>, username: String,
 
     Ok(())
 }
+
+// ============ 用户数据导出/导入 ============
+
+/// 导出用户数据为ZIP压缩包
+/// 包含：数据库、加密密钥文件（不包含密码和恢复码明文）
+#[tauri::command]
+pub fn export_user_data(username: String, output_path: String) -> Result<String, String> {
+    use std::io::Write;
+    use zip::write::FileOptions;
+
+    let user_dir = format!("data/{}", username);
+
+    // 需要导出的文件列表（不包含恢复码明文）
+    let files_to_export = [
+        format!("data_{}.db", username),
+        "salt.key".to_string(),
+        "master.key".to_string(),
+        "auth.verify".to_string(),
+        "recovery.key".to_string(),
+        "recovery_salt.key".to_string(),
+    ];
+
+    // 创建ZIP文件
+    let file = std::fs::File::create(&output_path)
+        .map_err(|e| format!("创建ZIP文件失败: {}", e))?;
+
+    let mut zip = zip::ZipWriter::new(file);
+    let options = FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o600);
+
+    let mut files_added = 0;
+
+    for filename in &files_to_export {
+        let file_path = format!("{}/{}", user_dir, filename);
+        if std::path::Path::new(&file_path).exists() {
+            let content = std::fs::read(&file_path)
+                .map_err(|e| format!("读取文件 {} 失败: {}", filename, e))?;
+
+            zip.start_file(filename, options)
+                .map_err(|e| format!("创建ZIP条目失败: {}", e))?;
+
+            zip.write_all(&content)
+                .map_err(|e| format!("写入ZIP条目失败: {}", e))?;
+
+            files_added += 1;
+        }
+    }
+
+    if files_added == 0 {
+        return Err("没有找到可导出的用户数据".to_string());
+    }
+
+    zip.finish()
+        .map_err(|e| format!("完成ZIP文件失败: {}", e))?;
+
+    Ok(output_path)
+}
+
+/// 从ZIP压缩包导入用户数据
+#[tauri::command]
+pub fn import_user_data(state: State<'_, DbState>, username: String, zip_path: String) -> Result<String, String> {
+    use std::io::Read;
+
+    let user_dir = format!("data/{}", username);
+
+    // 创建用户数据目录
+    std::fs::create_dir_all(&user_dir)
+        .map_err(|e| format!("创建用户目录失败: {}", e))?;
+
+    // 打开ZIP文件
+    let file = std::fs::File::open(&zip_path)
+        .map_err(|e| format!("打开ZIP文件失败: {}", e))?;
+
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("读取ZIP文件失败: {}", e))?;
+
+    // 验证必要的文件是否存在
+    let required_files = ["salt.key", "master.key", "auth.verify"];
+    for required in &required_files {
+        if archive.by_name(required).is_err() {
+            return Err(format!("ZIP文件缺少必要文件: {}", required));
+        }
+    }
+
+    // 解压文件
+    let mut files_imported = 0;
+    let user_dir_path = std::path::Path::new(&user_dir);
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("读取ZIP条目失败: {}", e))?;
+
+        let outpath = match file.enclosed_name() {
+            Some(path) => user_dir_path.join(path),
+            None => continue,
+        };
+
+        // 防止路径遍历攻击
+        if !outpath.starts_with(user_dir_path) {
+            continue;
+        }
+
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents)
+            .map_err(|e| format!("读取ZIP内容失败: {}", e))?;
+
+        std::fs::write(&outpath, contents)
+            .map_err(|e| format!("写入文件失败: {}", e))?;
+
+        files_imported += 1;
+    }
+
+    if files_imported == 0 {
+        return Err("ZIP文件为空或无法读取".to_string());
+    }
+
+    // 尝试初始化数据库连接
+    let db_path = crypto::get_db_path(&username);
+    if std::path::Path::new(&db_path).exists() {
+        state.init_for_user(&username)?;
+    }
+
+    Ok(format!("成功导入 {} 个文件", files_imported))
+}

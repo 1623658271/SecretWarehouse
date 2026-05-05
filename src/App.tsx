@@ -60,7 +60,7 @@ function AppContent() {
       {showForm && <SecretForm />}
       {showTemplates && <TemplateList onSelectTemplate={handleSelectTemplate} />}
       {showTemplateForm && <TemplateForm />}
-      {showSettings && <Settings />}
+      {showSettings && <Settings username={currentUsername} />}
     </div>
   )
 }

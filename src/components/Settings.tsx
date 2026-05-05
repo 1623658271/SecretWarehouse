@@ -3,11 +3,15 @@ import { useStore } from '../stores/useStore'
 import { useTheme } from './ThemeProvider'
 import {
   X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Check, Star, Eye, Key,
-  Database, Download, Upload, Palette, AlignLeft, Grid3X3
+  Database, Download, Upload, Palette, AlignLeft, Grid3X3, Archive
 } from 'lucide-react'
 import { appWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/tauri'
 import { open, save } from '@tauri-apps/api/dialog'
+
+interface SettingsProps {
+  username: string
+}
 
 // Preset resolutions
 const windowResolutions = [
@@ -146,7 +150,7 @@ function SectionTitle({ icon: Icon, title }: { icon: React.ElementType, title: s
   )
 }
 
-export default function Settings() {
+export default function Settings({ username }: SettingsProps) {
   const { showSettings, setShowSettings, settings, updateSettings, resetSettings, fetchSecrets } = useStore()
   const { theme, setTheme } = useTheme()
   const [showSaved, setShowSaved] = useState(false)
@@ -246,7 +250,7 @@ export default function Settings() {
       })
 
       if (filePath) {
-        await invoke('export_database', { path: filePath })
+        await invoke('export_database', { username, path: filePath })
         setDataStatus('success')
         setDataMessage('导出成功！')
         setTimeout(() => {
@@ -278,11 +282,79 @@ export default function Settings() {
         setDataStatus('importing')
         setDataMessage(mode === 'overwrite' ? '正在覆盖导入...' : '正在增量导入...')
 
-        const count = await invoke<number>('import_database', { path: filePath, mode })
+        const count = await invoke<number>('import_database', { username, path: filePath, mode })
         await fetchSecrets()
 
         setDataStatus('success')
         setDataMessage(mode === 'overwrite' ? `覆盖导入成功！共 ${count} 条` : `增量导入成功！新增 ${count} 条`)
+        setTimeout(() => {
+          setDataStatus('idle')
+          setDataMessage('')
+        }, 3000)
+      }
+    } catch (err) {
+      setDataStatus('error')
+      setDataMessage(`导入失败: ${err}`)
+      setTimeout(() => {
+        setDataStatus('idle')
+        setDataMessage('')
+      }, 3000)
+    }
+  }
+
+  // Export user data as ZIP
+  const handleExportUserData = async () => {
+    try {
+      setDataStatus('exporting')
+      setDataMessage('正在打包用户数据...')
+
+      const now = new Date()
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
+      const defaultName = `SecretWarehouse_${username}_${dateStr}.zip`
+
+      const filePath = await save({
+        defaultPath: defaultName,
+        filters: [{ name: 'ZIP Archive', extensions: ['zip'] }]
+      })
+
+      if (filePath) {
+        await invoke('export_user_data', { username, outputPath: filePath })
+        setDataStatus('success')
+        setDataMessage('用户数据导出成功！')
+        setTimeout(() => {
+          setDataStatus('idle')
+          setDataMessage('')
+        }, 2000)
+      } else {
+        setDataStatus('idle')
+        setDataMessage('')
+      }
+    } catch (err) {
+      setDataStatus('error')
+      setDataMessage(`导出失败: ${err}`)
+      setTimeout(() => {
+        setDataStatus('idle')
+        setDataMessage('')
+      }, 3000)
+    }
+  }
+
+  // Import user data from ZIP
+  const handleImportUserData = async () => {
+    try {
+      const filePath = await open({
+        filters: [{ name: 'ZIP Archive', extensions: ['zip'] }]
+      })
+
+      if (filePath && typeof filePath === 'string') {
+        setDataStatus('importing')
+        setDataMessage('正在导入用户数据...')
+
+        const result = await invoke<string>('import_user_data', { username, zipPath: filePath })
+        await fetchSecrets()
+
+        setDataStatus('success')
+        setDataMessage(result)
         setTimeout(() => {
           setDataStatus('idle')
           setDataMessage('')
@@ -506,7 +578,44 @@ export default function Settings() {
             <div className="space-y-4">
               <SectionTitle icon={Database} title="数据" />
 
-              {/* Export */}
+              {/* Export User Data (ZIP) */}
+              <div>
+                <button
+                  onClick={handleExportUserData}
+                  disabled={dataStatus === 'exporting'}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Archive className="w-4 h-4" />
+                  <span>导出用户数据</span>
+                </button>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                  导出加密数据和密钥文件为 ZIP 包（不含密码）
+                </p>
+              </div>
+
+              {/* Import User Data (ZIP) */}
+              <div>
+                <button
+                  onClick={handleImportUserData}
+                  disabled={dataStatus === 'importing'}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>导入用户数据</span>
+                </button>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                  从 ZIP 包导入加密数据（需用原密码解锁）
+                </p>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-2 py-2">
+                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                <span className="text-[10px] text-slate-400 uppercase">仅数据库</span>
+                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+              </div>
+
+              {/* Export Database Only */}
               <div>
                 <button
                   onClick={handleExport}
@@ -517,7 +626,7 @@ export default function Settings() {
                   <span>导出数据库</span>
                 </button>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
-                  备份所有数据到本地 .db 文件
+                  仅导出 .db 文件（需配合密钥文件使用）
                 </p>
               </div>
 
