@@ -1,8 +1,101 @@
-import { useState, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useStore } from '../stores/useStore'
 import { useTheme } from './ThemeProvider'
-import { X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Minimize2, Check, GripVertical, Star, Eye, Key } from 'lucide-react'
+import { X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Minimize2, Check, Star, Eye, Key } from 'lucide-react'
 import { appWindow } from '@tauri-apps/api/window'
+
+// Slider with double-click input component
+interface SliderWithInputProps {
+  label: string
+  value: number
+  min: number
+  max: number
+  step?: number
+  unit: string
+  onChange: (value: number) => void
+  icon?: React.ReactNode
+}
+
+function SliderWithInput({ label, value, min, max, step = 1, unit, onChange, icon }: SliderWithInputProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [inputValue, setInputValue] = useState(String(value))
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleDoubleClick = () => {
+    setInputValue(String(value))
+    setIsEditing(true)
+    setTimeout(() => inputRef.current?.select(), 0)
+  }
+
+  const handleSubmit = () => {
+    const numValue = Math.min(max, Math.max(min, parseInt(inputValue) || min))
+    onChange(numValue)
+    setIsEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSubmit()
+    } else if (e.key === 'Escape') {
+      setIsEditing(false)
+    }
+  }
+
+  const percentage = ((value - min) / (max - min)) * 100
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
+        </div>
+        {isEditing ? (
+          <div className="flex items-center gap-1">
+            <input
+              ref={inputRef}
+              type="number"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onBlur={handleSubmit}
+              onKeyDown={handleKeyDown}
+              className="w-16 px-2 py-1 text-sm text-center bg-slate-100 dark:bg-slate-800 border border-violet-500 rounded-lg text-slate-900 dark:text-white focus:outline-none"
+              min={min}
+              max={max}
+            />
+            <span className="text-xs text-slate-500">{unit}</span>
+          </div>
+        ) : (
+          <span
+            onDoubleClick={handleDoubleClick}
+            className="px-2 py-1 text-sm font-mono bg-slate-100 dark:bg-slate-800 rounded-lg text-violet-600 dark:text-violet-400 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            title="双击自定义输入"
+          >
+            {value}{unit}
+          </span>
+        )}
+      </div>
+      <div className="relative">
+        <input
+          type="range"
+          value={value}
+          onChange={(e) => onChange(parseInt(e.target.value))}
+          min={min}
+          max={max}
+          step={step}
+          className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-violet-500"
+          style={{
+            background: `linear-gradient(to right, #8b5cf6 0%, #8b5cf6 ${percentage}%, ${document.documentElement.classList.contains('dark') ? '#374151' : '#e5e7eb'} ${percentage}%, ${document.documentElement.classList.contains('dark') ? '#374151' : '#e5e7eb'} 100%)`
+          }}
+        />
+        <div className="flex justify-between mt-1">
+          <span className="text-xs text-slate-400">{min}{unit}</span>
+          <span className="text-xs text-slate-400">{max}{unit}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Settings() {
   const { showSettings, setShowSettings, settings, updateSettings, resetSettings } = useStore()
@@ -48,24 +141,6 @@ export default function Settings() {
 
   if (!showSettings) return null
 
-  const fontSizes = [
-    { value: 'small' as const, label: '小', size: '12px' },
-    { value: 'medium' as const, label: '中', size: '14px' },
-    { value: 'large' as const, label: '大', size: '16px' },
-  ]
-
-  const cardSizes = [
-    { value: 'compact' as const, label: '紧凑', icon: '□' },
-    { value: 'normal' as const, label: '标准', icon: '□□' },
-    { value: 'comfortable' as const, label: '宽松', icon: '□□□' },
-  ]
-
-  const spacingOptions = [
-    { value: 'tight' as const, label: '紧凑' },
-    { value: 'normal' as const, label: '标准' },
-    { value: 'relaxed' as const, label: '宽松' },
-  ]
-
   const windowSizes = [
     { value: 'small' as const, label: '小窗口', desc: '800×600', icon: Minimize2 },
     { value: 'medium' as const, label: '中窗口', desc: '1200×800', icon: LayoutGrid },
@@ -74,10 +149,10 @@ export default function Settings() {
     { value: 'fullscreen' as const, label: '全屏', desc: '全屏模式', icon: Maximize2 },
   ]
 
-  // Preview card styles
-  const previewPadding = { compact: 'p-2', normal: 'p-3', comfortable: 'p-4' }[settings.cardSize]
-  const previewIconSize = { compact: 'w-6 h-6', normal: 'w-8 h-8', comfortable: 'w-10 h-10' }[settings.cardSize]
-  const previewGap = { tight: 'gap-1', normal: 'gap-2', relaxed: 'gap-3' }[settings.spacing]
+  // Calculate preview styles based on settings
+  const previewPadding = settings.cardSize <= 32 ? 'p-2' : settings.cardSize <= 40 ? 'p-3' : 'p-4'
+  const previewIconSize = `w-${Math.round(settings.cardSize / 4) + 4} h-${Math.round(settings.cardSize / 4) + 4}`
+  const previewGap = settings.spacing <= 6 ? 'gap-1' : settings.spacing <= 8 ? 'gap-2' : 'gap-3'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
@@ -114,7 +189,7 @@ export default function Settings() {
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Settings Panel */}
-          <div className="w-1/2 overflow-y-auto p-6 space-y-6 border-r border-slate-200 dark:border-slate-700/40">
+          <div className="w-1/2 overflow-y-auto p-6 space-y-8 border-r border-slate-200 dark:border-slate-700/40">
             {/* Theme */}
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -168,81 +243,38 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Font Size */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Type className="w-4 h-4 text-violet-500" />
-                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">字体大小</label>
-              </div>
-              <div className="flex gap-2">
-                {fontSizes.map(({ value, label, size }) => (
-                  <button
-                    key={value}
-                    onClick={() => handleUpdateSettings({ fontSize: value })}
-                    className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
-                      settings.fontSize === value
-                        ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 ring-2 ring-violet-500'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    <span className="font-bold" style={{ fontSize: size }}>{label}</span>
-                    <span className="text-xs opacity-60">{size}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Font Size Slider */}
+            <SliderWithInput
+              label="字体大小"
+              value={settings.fontSize}
+              min={10}
+              max={24}
+              unit="px"
+              icon={<Type className="w-4 h-4 text-violet-500" />}
+              onChange={(value) => handleUpdateSettings({ fontSize: value })}
+            />
 
-            {/* Card Size */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <LayoutGrid className="w-4 h-4 text-violet-500" />
-                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">卡片大小</label>
-              </div>
-              <div className="flex gap-2">
-                {cardSizes.map(({ value, label, icon }) => (
-                  <button
-                    key={value}
-                    onClick={() => handleUpdateSettings({ cardSize: value })}
-                    className={`flex-1 flex flex-col items-center gap-2 p-3 rounded-xl transition-all ${
-                      settings.cardSize === value
-                        ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 ring-2 ring-violet-500'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    <span className="text-lg tracking-tight">{icon}</span>
-                    <span className="text-xs font-medium">{label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Card Size Slider */}
+            <SliderWithInput
+              label="卡片大小"
+              value={settings.cardSize}
+              min={24}
+              max={56}
+              unit="px"
+              icon={<LayoutGrid className="w-4 h-4 text-violet-500" />}
+              onChange={(value) => handleUpdateSettings({ cardSize: value })}
+            />
 
-            {/* Spacing */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Space className="w-4 h-4 text-violet-500" />
-                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">间距</label>
-              </div>
-              <div className="flex gap-2">
-                {spacingOptions.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => handleUpdateSettings({ spacing: value })}
-                    className={`flex-1 flex flex-col items-center gap-2 p-3 rounded-xl transition-all ${
-                      settings.spacing === value
-                        ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 ring-2 ring-violet-500'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    <div className="flex flex-col items-center gap-0.5">
-                      <div className="w-8 h-1 bg-current rounded" />
-                      <div className={`w-8 h-1 bg-current rounded ${value === 'tight' ? '-mt-0' : value === 'normal' ? 'mt-0.5' : 'mt-1'}`} />
-                      <div className={`w-8 h-1 bg-current rounded ${value === 'tight' ? '-mt-0' : value === 'normal' ? 'mt-0.5' : 'mt-1'}`} />
-                    </div>
-                    <span className="text-xs font-medium">{label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Spacing Slider */}
+            <SliderWithInput
+              label="间距"
+              value={settings.spacing}
+              min={4}
+              max={16}
+              unit="px"
+              icon={<Space className="w-4 h-4 text-violet-500" />}
+              onChange={(value) => handleUpdateSettings({ spacing: value })}
+            />
           </div>
 
           {/* Preview Panel */}
@@ -253,47 +285,59 @@ export default function Settings() {
             </div>
 
             {/* Preview Card */}
-            <div className={`bg-white dark:bg-slate-900 rounded-2xl ${previewPadding} border border-slate-200 dark:border-slate-700/50 shadow-sm`}>
-              <div className={`flex items-start ${previewGap}`}>
-                <div className={`${previewIconSize} rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                  <Key className={`${settings.cardSize === 'compact' ? 'w-3 h-3' : settings.cardSize === 'normal' ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm"
+              style={{ padding: `${settings.cardSize / 4}px` }}
+            >
+              <div className="flex items-start" style={{ gap: `${settings.spacing}px` }}>
+                <div
+                  className="rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg"
+                  style={{ width: `${settings.cardSize}px`, height: `${settings.cardSize}px` }}
+                >
+                  <Key className="text-white" style={{ width: `${settings.cardSize / 2}px`, height: `${settings.cardSize / 2}px` }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-slate-900 dark:text-white truncate">示例密码</h3>
-                    <Star className="w-4 h-4 text-amber-500 fill-current flex-shrink-0" />
+                  <div className="flex items-center" style={{ gap: `${settings.spacing / 2}px` }}>
+                    <h3 className="font-semibold text-slate-900 dark:text-white truncate" style={{ fontSize: `${settings.fontSize + 2}px` }}>示例密码</h3>
+                    <Star className="text-amber-500 fill-current flex-shrink-0" style={{ width: `${settings.fontSize + 2}px`, height: `${settings.fontSize + 2}px` }} />
                   </div>
-                  <p className={`text-slate-500 dark:text-slate-400 truncate mt-1 ${settings.fontSize === 'small' ? 'text-xs' : settings.fontSize === 'large' ? 'text-base' : 'text-sm'}`}>
+                  <p className="text-slate-500 dark:text-slate-400 truncate mt-1" style={{ fontSize: `${settings.fontSize}px` }}>
                     username@example.com
                   </p>
                 </div>
                 <div className="opacity-50">
-                  <Eye className="w-4 h-4 text-violet-500" />
+                  <Eye className="text-violet-500" style={{ width: `${settings.fontSize + 2}px`, height: `${settings.fontSize + 2}px` }} />
                 </div>
               </div>
 
-              <div className={`flex items-center mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/30 ${previewGap}`}>
-                <span className={`text-slate-400 ${settings.fontSize === 'small' ? 'text-xs' : settings.fontSize === 'large' ? 'text-base' : 'text-sm'}`}>
-                  3 个字段
-                </span>
+              <div className="flex items-center mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/30" style={{ gap: `${settings.spacing / 2}px` }}>
+                <span className="text-slate-400" style={{ fontSize: `${settings.fontSize - 2}px` }}>3 个字段</span>
                 <span className="text-slate-300 dark:text-slate-600">·</span>
-                <span className={`text-violet-500 dark:text-violet-400 font-medium ${settings.fontSize === 'small' ? 'text-xs' : settings.fontSize === 'large' ? 'text-base' : 'text-sm'}`}>
-                  双击查看详情
-                </span>
+                <span className="text-violet-500 dark:text-violet-400 font-medium" style={{ fontSize: `${settings.fontSize - 2}px` }}>双击查看详情</span>
               </div>
             </div>
 
             {/* Multiple Cards Preview */}
-            <div className={`mt-4 grid grid-cols-2 ${settings.spacing === 'tight' ? 'gap-2' : settings.spacing === 'relaxed' ? 'gap-4' : 'gap-3'}`}>
+            <div
+              className="mt-4 grid grid-cols-2"
+              style={{ gap: `${settings.spacing}px` }}
+            >
               {[1, 2].map((i) => (
-                <div key={i} className={`bg-white dark:bg-slate-900 rounded-2xl ${previewPadding} border border-slate-200 dark:border-slate-700/50 shadow-sm`}>
-                  <div className="flex items-center gap-2">
-                    <div className={`${settings.cardSize === 'compact' ? 'w-6 h-6' : settings.cardSize === 'normal' ? 'w-8 h-8' : 'w-10 h-10'} rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center`}>
-                      <Key className={`${settings.cardSize === 'compact' ? 'w-3 h-3' : settings.cardSize === 'normal' ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
+                <div
+                  key={i}
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm"
+                  style={{ padding: `${settings.cardSize / 5}px` }}
+                >
+                  <div className="flex items-center" style={{ gap: `${settings.spacing / 2}px` }}>
+                    <div
+                      className="rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center"
+                      style={{ width: `${settings.cardSize / 1.5}px`, height: `${settings.cardSize / 1.5}px` }}
+                    >
+                      <Key className="text-white" style={{ width: `${settings.cardSize / 3}px`, height: `${settings.cardSize / 3}px` }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-slate-900 dark:text-white truncate text-sm">卡片 {i}</h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">预览内容</p>
+                      <h4 className="font-medium text-slate-900 dark:text-white truncate" style={{ fontSize: `${settings.fontSize}px` }}>卡片 {i}</h4>
+                      <p className="text-slate-500 dark:text-slate-400 truncate" style={{ fontSize: `${settings.fontSize - 2}px` }}>预览内容</p>
                     </div>
                   </div>
                 </div>
@@ -304,12 +348,17 @@ export default function Settings() {
             <div className="mt-6 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700/50">
               <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">字体大小预览</h4>
               <div className="space-y-2">
-                <p className={`text-slate-600 dark:text-slate-400 ${settings.fontSize === 'small' ? 'text-xs' : settings.fontSize === 'large' ? 'text-base' : 'text-sm'}`}>
+                <p className="text-slate-600 dark:text-slate-400" style={{ fontSize: `${settings.fontSize}px` }}>
                   这是当前字体大小的示例文本，用于预览设置效果。
                 </p>
-                <p className={`text-slate-500 dark:text-slate-500 ${settings.fontSize === 'small' ? 'text-xs' : settings.fontSize === 'large' ? 'text-base' : 'text-sm'}`}>
+                <p className="text-slate-500 dark:text-slate-500" style={{ fontSize: `${settings.fontSize}px` }}>
                   The quick brown fox jumps over the lazy dog.
                 </p>
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <p className="text-slate-400" style={{ fontSize: `${settings.fontSize - 2}px` }}>
+                    字体大小: {settings.fontSize}px | 卡片大小: {settings.cardSize}px | 间距: {settings.spacing}px
+                  </p>
+                </div>
               </div>
             </div>
           </div>

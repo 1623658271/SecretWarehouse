@@ -3,16 +3,16 @@ import { invoke } from '@tauri-apps/api/tauri'
 import { SecretEntry, CreateSecretRequest, UpdateSecretRequest, Template, CreateTemplateRequest, UpdateTemplateRequest } from '../types'
 
 interface AppSettings {
-  fontSize: 'small' | 'medium' | 'large'
-  cardSize: 'compact' | 'normal' | 'comfortable'
-  spacing: 'tight' | 'normal' | 'relaxed'
+  fontSize: number
+  cardSize: number
+  spacing: number
   windowSize: 'small' | 'medium' | 'large' | 'maximized' | 'fullscreen'
 }
 
 const defaultSettings: AppSettings = {
-  fontSize: 'medium',
-  cardSize: 'normal',
-  spacing: 'normal',
+  fontSize: 14,
+  cardSize: 40,
+  spacing: 8,
   windowSize: 'maximized',
 }
 

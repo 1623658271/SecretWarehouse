@@ -40,23 +40,10 @@ function AppContent() {
     ;(window as any).__selectedTemplate = template
   }
 
-  // Generate classes based on settings
-  const fontSizeClass = {
-    small: 'text-sm',
-    medium: 'text-base',
-    large: 'text-lg',
-  }[settings.fontSize]
-
-  const spacingClass = {
-    tight: 'gap-2',
-    normal: 'gap-4',
-    relaxed: 'gap-6',
-  }[settings.spacing]
-
   return (
-    <div className={`flex h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-white ${fontSizeClass}`}>
+    <div className="flex h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-white" style={{ fontSize: `${settings.fontSize}px` }}>
       <Sidebar />
-      <div className={`flex-1 flex flex-col overflow-hidden ${spacingClass}`}>
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ gap: `${settings.spacing}px` }}>
         <SearchBar />
         <SecretList />
       </div>
