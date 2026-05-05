@@ -6,7 +6,9 @@ interface AppSettings {
   fontSize: number
   cardSize: number
   spacing: number
-  windowSize: 'small' | 'medium' | 'large' | 'maximized' | 'fullscreen'
+  windowSize: string  // 'maximized' | 'fullscreen' | 'WxH' format like '1920x1080' | 'custom'
+  customWidth: number
+  customHeight: number
 }
 
 const defaultSettings: AppSettings = {
@@ -14,6 +16,8 @@ const defaultSettings: AppSettings = {
   cardSize: 40,
   spacing: 8,
   windowSize: 'maximized',
+  customWidth: 1200,
+  customHeight: 800,
 }
 
 // Load settings from localStorage

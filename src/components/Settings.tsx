@@ -1,8 +1,42 @@
 import { useState, useRef } from 'react'
 import { useStore } from '../stores/useStore'
 import { useTheme } from './ThemeProvider'
-import { X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Minimize2, Check, Star, Eye, Key } from 'lucide-react'
+import { X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Check, Star, Eye, Key } from 'lucide-react'
 import { appWindow } from '@tauri-apps/api/window'
+
+// Preset resolutions
+const windowResolutions = [
+  { value: 'maximized', label: '最大化窗口' },
+  { value: 'fullscreen', label: '全屏模式' },
+  { value: 'divider1', label: '────────────────────' },
+  { value: '2560x1600', label: '2560 × 1600 (推荐)' },
+  { value: '2560x1440', label: '2560 × 1440' },
+  { value: '2048x1536', label: '2048 × 1536' },
+  { value: '2048x1152', label: '2048 × 1152' },
+  { value: '1920x1440', label: '1920 × 1440' },
+  { value: '1920x1200', label: '1920 × 1200' },
+  { value: '1920x1080', label: '1920 × 1080' },
+  { value: '1856x1392', label: '1856 × 1392' },
+  { value: '1792x1344', label: '1792 × 1344' },
+  { value: '1680x1050', label: '1680 × 1050' },
+  { value: '1600x1200', label: '1600 × 1200' },
+  { value: '1600x900', label: '1600 × 900' },
+  { value: '1440x900', label: '1440 × 900' },
+  { value: '1400x1050', label: '1400 × 1050' },
+  { value: '1366x768', label: '1366 × 768' },
+  { value: '1360x768', label: '1360 × 768' },
+  { value: '1280x1024', label: '1280 × 1024' },
+  { value: '1280x960', label: '1280 × 960' },
+  { value: '1280x800', label: '1280 × 800' },
+  { value: '1280x768', label: '1280 × 768' },
+  { value: '1280x720', label: '1280 × 720' },
+  { value: '1280x600', label: '1280 × 600' },
+  { value: '1152x864', label: '1152 × 864' },
+  { value: '1024x768', label: '1024 × 768' },
+  { value: '800x600', label: '800 × 600' },
+  { value: 'divider2', label: '────────────────────' },
+  { value: 'custom', label: '自定义' },
+]
 
 // Slider with double-click input component
 interface SliderWithInputProps {
@@ -101,6 +135,12 @@ export default function Settings() {
   const { showSettings, setShowSettings, settings, updateSettings, resetSettings } = useStore()
   const { theme, setTheme } = useTheme()
   const [showSaved, setShowSaved] = useState(false)
+  const [editingWidth, setEditingWidth] = useState(false)
+  const [editingHeight, setEditingHeight] = useState(false)
+  const [widthInput, setWidthInput] = useState(String(settings.customWidth))
+  const [heightInput, setHeightInput] = useState(String(settings.customHeight))
+  const widthInputRef = useRef<HTMLInputElement>(null)
+  const heightInputRef = useRef<HTMLInputElement>(null)
 
   // Show saved notification
   const handleUpdateSettings = (partial: Partial<typeof settings>) => {
@@ -110,9 +150,13 @@ export default function Settings() {
   }
 
   // Handle window size change
-  const handleWindowSizeChange = async (size: 'small' | 'medium' | 'large' | 'maximized' | 'fullscreen') => {
+  const handleWindowSizeChange = async (size: string) => {
     handleUpdateSettings({ windowSize: size })
+    await applyWindowSize(size, settings.customWidth, settings.customHeight)
+  }
 
+  // Apply window size
+  const applyWindowSize = async (size: string, width: number, height: number) => {
     try {
       if (size === 'maximized') {
         await appWindow.maximize()
@@ -120,18 +164,16 @@ export default function Settings() {
       } else if (size === 'fullscreen') {
         await appWindow.setFullscreen(true)
         await appWindow.unmaximize()
-      } else {
+      } else if (size === 'custom') {
         await appWindow.setFullscreen(false)
         await appWindow.unmaximize()
-
-        const sizes = {
-          small: { width: 800, height: 600 },
-          medium: { width: 1200, height: 800 },
-          large: { width: 1600, height: 1000 },
-        }
-
-        const { width, height } = sizes[size]
         await appWindow.setSize({ type: 'Logical', width, height })
+        await appWindow.center()
+      } else if (size.includes('x')) {
+        await appWindow.setFullscreen(false)
+        await appWindow.unmaximize()
+        const [w, h] = size.split('x').map(Number)
+        await appWindow.setSize({ type: 'Logical', width: w, height: h })
         await appWindow.center()
       }
     } catch (err) {
@@ -139,20 +181,43 @@ export default function Settings() {
     }
   }
 
+  // Handle custom width change
+  const handleCustomWidthChange = async () => {
+    const newWidth = Math.max(400, Math.min(3840, parseInt(widthInput) || 1200))
+    setWidthInput(String(newWidth))
+    handleUpdateSettings({ customWidth: newWidth })
+    setEditingWidth(false)
+    if (settings.windowSize === 'custom') {
+      await applyWindowSize('custom', newWidth, settings.customHeight)
+    }
+  }
+
+  // Handle custom height change
+  const handleCustomHeightChange = async () => {
+    const newHeight = Math.max(300, Math.min(2160, parseInt(heightInput) || 800))
+    setHeightInput(String(newHeight))
+    handleUpdateSettings({ customHeight: newHeight })
+    setEditingHeight(false)
+    if (settings.windowSize === 'custom') {
+      await applyWindowSize('custom', settings.customWidth, newHeight)
+    }
+  }
+
+  // Handle double click on width
+  const handleWidthDoubleClick = () => {
+    setWidthInput(String(settings.customWidth))
+    setEditingWidth(true)
+    setTimeout(() => widthInputRef.current?.select(), 0)
+  }
+
+  // Handle double click on height
+  const handleHeightDoubleClick = () => {
+    setHeightInput(String(settings.customHeight))
+    setEditingHeight(true)
+    setTimeout(() => heightInputRef.current?.select(), 0)
+  }
+
   if (!showSettings) return null
-
-  const windowSizes = [
-    { value: 'small' as const, label: '小窗口', desc: '800×600', icon: Minimize2 },
-    { value: 'medium' as const, label: '中窗口', desc: '1200×800', icon: LayoutGrid },
-    { value: 'large' as const, label: '大窗口', desc: '1600×1000', icon: Maximize2 },
-    { value: 'maximized' as const, label: '最大化', desc: '窗口模式', icon: Maximize2 },
-    { value: 'fullscreen' as const, label: '全屏', desc: '全屏模式', icon: Maximize2 },
-  ]
-
-  // Calculate preview styles based on settings
-  const previewPadding = settings.cardSize <= 32 ? 'p-2' : settings.cardSize <= 40 ? 'p-3' : 'p-4'
-  const previewIconSize = `w-${Math.round(settings.cardSize / 4) + 4} h-${Math.round(settings.cardSize / 4) + 4}`
-  const previewGap = settings.spacing <= 6 ? 'gap-1' : settings.spacing <= 8 ? 'gap-2' : 'gap-3'
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
@@ -224,23 +289,95 @@ export default function Settings() {
                 <Maximize2 className="w-4 h-4 text-violet-500" />
                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">窗口大小</label>
               </div>
-              <div className="grid grid-cols-5 gap-2">
-                {windowSizes.map(({ value, label, desc, icon: Icon }) => (
-                  <button
+              <select
+                value={settings.windowSize}
+                onChange={(e) => handleWindowSizeChange(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+              >
+                {windowResolutions.map(({ value, label }) => (
+                  <option
                     key={value}
-                    onClick={() => handleWindowSizeChange(value)}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
-                      settings.windowSize === value
-                        ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 ring-2 ring-violet-500'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
+                    value={value}
+                    disabled={value.startsWith('divider')}
+                    className={value.startsWith('divider') ? 'text-slate-400' : ''}
                   >
-                    <Icon className="w-4 h-4" />
-                    <span className="text-xs font-medium">{label}</span>
-                    <span className="text-[10px] opacity-60">{desc}</span>
-                  </button>
+                    {label}
+                  </option>
                 ))}
-              </div>
+              </select>
+
+              {/* Custom width/height inputs */}
+              {settings.windowSize === 'custom' && (
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">宽度</label>
+                    {editingWidth ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          ref={widthInputRef}
+                          type="number"
+                          value={widthInput}
+                          onChange={(e) => setWidthInput(e.target.value)}
+                          onBlur={handleCustomWidthChange}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCustomWidthChange()
+                            if (e.key === 'Escape') setEditingWidth(false)
+                          }}
+                          className="w-full px-2 py-1.5 text-sm text-center bg-white dark:bg-slate-900 border border-violet-500 rounded-lg text-slate-900 dark:text-white focus:outline-none"
+                          min={400}
+                          max={3840}
+                        />
+                        <span className="text-xs text-slate-500">px</span>
+                      </div>
+                    ) : (
+                      <div
+                        onDoubleClick={handleWidthDoubleClick}
+                        className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-center text-violet-600 dark:text-violet-400 font-mono cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors"
+                        title="双击编辑"
+                      >
+                        {settings.customWidth} px
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-slate-400 mt-5">×</span>
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">高度</label>
+                    {editingHeight ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          ref={heightInputRef}
+                          type="number"
+                          value={heightInput}
+                          onChange={(e) => setHeightInput(e.target.value)}
+                          onBlur={handleCustomHeightChange}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCustomHeightChange()
+                            if (e.key === 'Escape') setEditingHeight(false)
+                          }}
+                          className="w-full px-2 py-1.5 text-sm text-center bg-white dark:bg-slate-900 border border-violet-500 rounded-lg text-slate-900 dark:text-white focus:outline-none"
+                          min={300}
+                          max={2160}
+                        />
+                        <span className="text-xs text-slate-500">px</span>
+                      </div>
+                    ) : (
+                      <div
+                        onDoubleClick={handleHeightDoubleClick}
+                        className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-center text-violet-600 dark:text-violet-400 font-mono cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors"
+                        title="双击编辑"
+                      >
+                        {settings.customHeight} px
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => applyWindowSize('custom', settings.customWidth, settings.customHeight)}
+                    className="mt-5 px-3 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-lg transition-colors"
+                  >
+                    应用
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Font Size Slider */}

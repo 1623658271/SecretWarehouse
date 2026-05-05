@@ -174,7 +174,9 @@ function SecretCard({ secret, index, isSelected, isSelectionMode, onDoubleClick,
           className={`rounded-xl bg-gradient-to-br ${gradientColor} flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300`}
           style={{ width: `${settings.cardSize}px`, height: `${settings.cardSize}px` }}
         >
-          <Icon className="text-white" style={{ width: `${settings.cardSize / 2}px`, height: `${settings.cardSize / 2}px` }} />
+          <span style={{ width: `${settings.cardSize / 2}px`, height: `${settings.cardSize / 2}px`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon className="text-white w-full h-full" />
+          </span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
