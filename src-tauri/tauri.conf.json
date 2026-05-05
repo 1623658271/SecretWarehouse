@@ -34,6 +34,7 @@
     "windows": [
       {
         "fullscreen": false,
+        "maximized": true,
         "resizable": true,
         "title": "SecretWarehouse - 安全密码管理器",
         "width": 1200,
