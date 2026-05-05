@@ -6,12 +6,14 @@ interface AppSettings {
   fontSize: 'small' | 'medium' | 'large'
   cardSize: 'compact' | 'normal' | 'comfortable'
   spacing: 'tight' | 'normal' | 'relaxed'
+  windowSize: 'small' | 'medium' | 'large' | 'maximized' | 'fullscreen'
 }
 
 const defaultSettings: AppSettings = {
   fontSize: 'medium',
   cardSize: 'normal',
   spacing: 'normal',
+  windowSize: 'maximized',
 }
 
 // Load settings from localStorage
