@@ -14,6 +14,13 @@
       "clipboard": {
         "all": true
       },
+      "dialog": {
+        "save": true
+      },
+      "fs": {
+        "writeFile": true,
+        "scope": ["**"]
+      },
       "shell": {
         "all": false,
         "open": true
