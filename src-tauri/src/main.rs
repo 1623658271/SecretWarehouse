@@ -24,6 +24,7 @@ fn main() {
             commands::delete_secrets,
             commands::search_secrets,
             commands::get_all_tags,
+            commands::get_tag_counts,
             commands::generate_password,
             commands::generate_test_data,
             commands::create_template,

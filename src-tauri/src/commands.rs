@@ -88,6 +88,11 @@ pub fn get_all_tags(state: State<'_, DbState>) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+pub fn get_tag_counts(state: State<'_, DbState>) -> Result<std::collections::HashMap<String, i32>, String> {
+    state.get_tag_counts()
+}
+
+#[tauri::command]
 pub fn generate_password(
     length: Option<usize>,
     use_upper: Option<bool>,

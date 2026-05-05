@@ -292,6 +292,28 @@ impl DbState {
         Ok(all_tags)
     }
 
+    pub fn get_tag_counts(&self) -> Result<std::collections::HashMap<String, i32>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let mut stmt = conn.prepare("SELECT tags FROM secrets")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| {
+            let tags_json: String = row.get(0)?;
+            Ok(tags_json)
+        }).map_err(|e| e.to_string())?;
+
+        let mut tag_counts: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
+        for row in rows {
+            let tags_json = row.map_err(|e| e.to_string())?;
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            for tag in tags {
+                *tag_counts.entry(tag).or_insert(0) += 1;
+            }
+        }
+
+        Ok(tag_counts)
+    }
+
     pub fn search_secrets(&self, query: &str) -> Result<Vec<SecretEntry>, String> {
         let key = crypto::get_encryption_key();
         let conn = self.conn.lock().map_err(|e| e.to_string())?;

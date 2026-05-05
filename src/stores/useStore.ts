@@ -7,6 +7,7 @@ interface AppState {
   secrets: SecretEntry[]
   selectedSecret: SecretEntry | null
   allTags: string[]  // 所有标签
+  tagCounts: Record<string, number>  // 标签计数
   selectedTag: string | null  // 选中的标签筛选
   searchQuery: string
   isLoading: boolean
@@ -27,6 +28,7 @@ interface AppState {
   // Actions
   fetchSecrets: (tag?: string) => Promise<void>
   fetchAllTags: () => Promise<void>
+  fetchTagCounts: () => Promise<void>
   createSecret: (req: CreateSecretRequest) => Promise<void>
   updateSecret: (req: UpdateSecretRequest) => Promise<SecretEntry>
   deleteSecret: (id: string) => Promise<void>
@@ -60,6 +62,7 @@ export const useStore = create<AppState>((set, get) => ({
   secrets: [],
   selectedSecret: null,
   allTags: [],
+  tagCounts: {},
   selectedTag: null,
   searchQuery: '',
   isLoading: false,
@@ -89,6 +92,7 @@ export const useStore = create<AppState>((set, get) => ({
       })
       set({ secrets, isLoading: false, selectedIds: new Set(), isSelectionMode: false })
       get().fetchAllTags()
+      get().fetchTagCounts()
     } catch (err) {
       set({ error: String(err), isLoading: false })
     }
@@ -100,6 +104,15 @@ export const useStore = create<AppState>((set, get) => ({
       set({ allTags: tags })
     } catch (err) {
       console.error('Failed to fetch tags:', err)
+    }
+  },
+
+  fetchTagCounts: async () => {
+    try {
+      const counts = await invoke<Record<string, number>>('get_tag_counts')
+      set({ tagCounts: counts })
+    } catch (err) {
+      console.error('Failed to fetch tag counts:', err)
     }
   },
 
