@@ -241,7 +241,7 @@ export default function Settings() {
       setDataMessage('正在导出...')
 
       const filePath = await save({
-        defaultPath: `secret_warehouse_backup_${new Date().toISOString().slice(0, 10)}.db`,
+        defaultPath: `data/data_output.db`,
         filters: [{ name: 'Database', extensions: ['db'] }]
       })
 

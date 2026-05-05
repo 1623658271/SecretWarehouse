@@ -12,6 +12,7 @@ src-tauri/target/
 
 # Database
 *.db
+data/
 
 # IDE
 .vscode/

@@ -9,7 +9,11 @@ pub struct DbState {
 
 impl DbState {
     pub fn new() -> Result<Self, String> {
-        let conn = Connection::open("secret_warehouse.db")
+        // 确保 data 目录存在
+        std::fs::create_dir_all("data")
+            .map_err(|e| format!("创建data目录失败: {}", e))?;
+
+        let conn = Connection::open("data/data_main.db")
             .map_err(|e| format!("打开数据库失败: {}", e))?;
 
         conn.execute_batch(

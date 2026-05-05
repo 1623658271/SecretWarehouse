@@ -301,7 +301,12 @@ pub fn delete_template(state: State<'_, DbState>, id: String) -> Result<bool, St
 
 #[tauri::command]
 pub fn export_database(path: String) -> Result<(), String> {
-    std::fs::copy("secret_warehouse.db", &path)
+    // 确保导出目录存在
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("创建导出目录失败: {}", e))?;
+    }
+    std::fs::copy("data/data_main.db", &path)
         .map_err(|e| format!("导出数据库失败: {}", e))?;
     Ok(())
 }
@@ -329,9 +334,9 @@ pub fn import_database(state: State<'_, DbState>, path: String, mode: String) ->
         let mut conn = state.conn.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
         *conn = rusqlite::Connection::open_in_memory()
             .map_err(|e| format!("创建临时连接失败: {}", e))?;
-        std::fs::copy(&path, "secret_warehouse.db")
+        std::fs::copy(&path, "data/data_main.db")
             .map_err(|e| format!("复制数据库文件失败: {}", e))?;
-        *conn = rusqlite::Connection::open("secret_warehouse.db")
+        *conn = rusqlite::Connection::open("data/data_main.db")
             .map_err(|e| format!("重新打开数据库失败: {}", e))?;
 
         // Count imported entries
