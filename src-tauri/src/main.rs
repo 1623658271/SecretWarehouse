@@ -34,6 +34,10 @@ fn main() {
             commands::delete_template,
             commands::export_database,
             commands::import_database,
+            commands::is_master_password_set,
+            commands::set_master_password,
+            commands::verify_master_password,
+            commands::clear_encryption_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

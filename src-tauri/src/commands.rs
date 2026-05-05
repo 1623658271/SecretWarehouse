@@ -1,3 +1,4 @@
+use crate::crypto;
 use crate::db::DbState;
 use crate::models::*;
 use indexmap::IndexMap;
@@ -395,4 +396,24 @@ pub fn import_database(state: State<'_, DbState>, path: String, mode: String) ->
 
         Ok(count)
     }
+}
+
+#[tauri::command]
+pub fn is_master_password_set() -> Result<bool, String> {
+    Ok(crypto::is_master_password_set())
+}
+
+#[tauri::command]
+pub fn set_master_password(password: String) -> Result<(), String> {
+    crypto::set_master_password(&password)
+}
+
+#[tauri::command]
+pub fn verify_master_password(password: String) -> Result<bool, String> {
+    crypto::verify_master_password(&password)
+}
+
+#[tauri::command]
+pub fn clear_encryption_key() {
+    crypto::clear_encryption_key();
 }

@@ -3,15 +3,129 @@ use aes_gcm::{
     Aes256Gcm, AeadCore, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use hmac::Hmac;
 use indexmap::IndexMap;
+use rand::RngCore;
+use sha2::{Sha256, Digest};
+use std::sync::Mutex;
 
-/// 开发模式固定密钥（32字节）
-const DEV_KEY: &[u8; 32] = b"dev_key_32_bytes_for_testing_!!1";
+/// 全局加密密钥（运行时由主密码派生）
+static ENCRYPTION_KEY: Mutex<Option<[u8; 32]>> = Mutex::new(None);
 
-/// 获取加密密钥（开发模式返回固定密钥）
+/// 盐值文件路径
+const SALT_FILE: &str = "data/.salt";
+/// 密钥哈希验证文件路径
+const KEY_HASH_FILE: &str = "data/.key_hash";
+
+/// 检查是否已设置主密码
+pub fn is_master_password_set() -> bool {
+    std::path::Path::new(KEY_HASH_FILE).exists()
+}
+
+/// 从主密码派生加密密钥（使用 PBKDF2-SHA256）
+fn derive_key_from_password(password: &str, salt: &[u8]) -> [u8; 32] {
+    let mut key = [0u8; 32];
+    // PBKDF2 with 100,000 iterations
+    pbkdf2::pbkdf2::<Hmac<Sha256>>(password.as_bytes(), salt, 100_000, &mut key)
+        .expect("PBKDF2 derivation failed");
+    key
+}
+
+/// 生成随机盐值
+fn generate_salt() -> [u8; 32] {
+    let mut salt = [0u8; 32];
+    OsRng.fill_bytes(&mut salt);
+    salt
+}
+
+/// 保存盐值到文件
+fn save_salt(salt: &[u8]) -> Result<(), String> {
+    std::fs::create_dir_all("data")
+        .map_err(|e| format!("创建data目录失败: {}", e))?;
+    std::fs::write(SALT_FILE, BASE64.encode(salt))
+        .map_err(|e| format!("保存盐值失败: {}", e))
+}
+
+/// 从文件读取盐值
+fn load_salt() -> Result<[u8; 32], String> {
+    let encoded = std::fs::read_to_string(SALT_FILE)
+        .map_err(|e| format!("读取盐值失败: {}", e))?;
+    let salt_bytes = BASE64.decode(encoded.trim())
+        .map_err(|e| format!("解码盐值失败: {}", e))?;
+    if salt_bytes.len() != 32 {
+        return Err("盐值长度错误".to_string());
+    }
+    let mut salt = [0u8; 32];
+    salt.copy_from_slice(&salt_bytes);
+    Ok(salt)
+}
+
+/// 保存密钥哈希（用于验证密码）
+fn save_key_hash(key: &[u8; 32]) -> Result<(), String> {
+    let mut hasher = Sha256::new();
+    hasher.update(key);
+    let hash = hasher.finalize();
+    std::fs::write(KEY_HASH_FILE, BASE64.encode(hash))
+        .map_err(|e| format!("保存密钥哈希失败: {}", e))
+}
+
+/// 验证密钥是否正确
+fn verify_key(key: &[u8; 32]) -> Result<bool, String> {
+    let stored_hash = std::fs::read_to_string(KEY_HASH_FILE)
+        .map_err(|e| format!("读取密钥哈希失败: {}", e))?;
+    let mut hasher = Sha256::new();
+    hasher.update(key);
+    let hash = hasher.finalize();
+    Ok(BASE64.encode(hash) == stored_hash.trim())
+}
+
+/// 设置主密码（首次使用）
+pub fn set_master_password(password: &str) -> Result<(), String> {
+    if password.len() < 8 {
+        return Err("密码长度至少8位".to_string());
+    }
+    if is_master_password_set() {
+        return Err("主密码已设置".to_string());
+    }
+
+    let salt = generate_salt();
+    save_salt(&salt)?;
+
+    let key = derive_key_from_password(password, &salt);
+    save_key_hash(&key)?;
+
+    // 设置全局密钥
+    let mut global_key = ENCRYPTION_KEY.lock().map_err(|e| e.to_string())?;
+    *global_key = Some(key);
+
+    Ok(())
+}
+
+/// 验证主密码
+pub fn verify_master_password(password: &str) -> Result<bool, String> {
+    let salt = load_salt()?;
+    let key = derive_key_from_password(password, &salt);
+
+    if verify_key(&key)? {
+        // 设置全局密钥
+        let mut global_key = ENCRYPTION_KEY.lock().map_err(|e| e.to_string())?;
+        *global_key = Some(key);
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// 获取当前加密密钥
 pub fn get_encryption_key() -> [u8; 32] {
-    // TODO: 生产模式使用 Argon2id 从主密码派生
-    *DEV_KEY
+    let global_key = ENCRYPTION_KEY.lock().expect("获取密钥锁失败");
+    global_key.expect("加密密钥未初始化，请先验证主密码")
+}
+
+/// 清除内存中的密钥（退出时调用）
+pub fn clear_encryption_key() {
+    let mut global_key = ENCRYPTION_KEY.lock().expect("获取密钥锁失败");
+    *global_key = None;
 }
 
 /// 加密单个值，返回 base64(nonce + ciphertext)

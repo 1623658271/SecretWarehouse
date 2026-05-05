@@ -13,6 +13,8 @@ src-tauri/target/
 # Database
 *.db
 data/
+.salt
+.key_hash
 
 # IDE
 .vscode/

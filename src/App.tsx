@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from './stores/useStore'
 import { ThemeProvider } from './components/ThemeProvider'
 import Sidebar from './components/Sidebar'
@@ -9,8 +9,10 @@ import SecretForm from './components/SecretForm'
 import TemplateList from './components/TemplateList'
 import TemplateForm from './components/TemplateForm'
 import Settings from './components/Settings'
+import MasterPassword from './components/MasterPassword'
 
 function AppContent() {
+  const [isUnlocked, setIsUnlocked] = useState(false)
   const fetchSecrets = useStore((s) => s.fetchSecrets)
   const showForm = useStore((s) => s.showForm)
   const selectedSecret = useStore((s) => s.selectedSecret)
@@ -23,21 +25,26 @@ function AppContent() {
   const initialized = useRef(false)
 
   useEffect(() => {
-    if (!initialized.current) {
+    if (!initialized.current && isUnlocked) {
       initialized.current = true
       fetchSecrets()
     }
-  }, [fetchSecrets])
+  }, [fetchSecrets, isUnlocked])
 
   const handleSelectTemplate = (template: any) => {
     setShowTemplates(false)
-    // Open form with template data - this is handled by SecretForm
-    // We need to pass the template data somehow
-    // For now, we'll use a temporary approach
     useStore.getState().setEditingSecret(null)
     setShowForm(true)
-    // Store the selected template for SecretForm to use
     ;(window as any).__selectedTemplate = template
+  }
+
+  const handleUnlock = () => {
+    setIsUnlocked(true)
+    fetchSecrets()
+  }
+
+  if (!isUnlocked) {
+    return <MasterPassword onUnlock={handleUnlock} />
   }
 
   return (
