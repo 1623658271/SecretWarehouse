@@ -1,18 +1,27 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
-import { Lock, Key, Eye, EyeOff, Check, AlertCircle } from 'lucide-react'
+import { save } from '@tauri-apps/api/dialog'
+import { writeTextFile } from '@tauri-apps/api/fs'
+import { Lock, Key, Eye, EyeOff, Check, AlertCircle, Download, RefreshCw, Copy } from 'lucide-react'
 
 interface MasterPasswordProps {
   onUnlock: () => void
 }
 
+type ViewMode = 'loading' | 'setup' | 'unlock' | 'showRecovery' | 'forgotPassword' | 'resetPassword'
+
 export default function MasterPassword({ onUnlock }: MasterPasswordProps) {
-  const [isSetup, setIsSetup] = useState<boolean | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('loading')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [recoveryCode, setRecoveryCode] = useState('')
+  const [recoveryInput, setRecoveryInput] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     checkMasterPassword()
@@ -21,7 +30,7 @@ export default function MasterPassword({ onUnlock }: MasterPasswordProps) {
   const checkMasterPassword = async () => {
     try {
       const isSet = await invoke<boolean>('is_master_password_set')
-      setIsSetup(isSet)
+      setViewMode(isSet ? 'unlock' : 'setup')
     } catch (err) {
       console.error('Failed to check master password:', err)
     }
@@ -30,11 +39,6 @@ export default function MasterPassword({ onUnlock }: MasterPasswordProps) {
   const handleSetup = async () => {
     setError('')
 
-    if (password.length < 8) {
-      setError('密码长度至少8位')
-      return
-    }
-
     if (password !== confirmPassword) {
       setError('两次输入的密码不一致')
       return
@@ -42,8 +46,9 @@ export default function MasterPassword({ onUnlock }: MasterPasswordProps) {
 
     setLoading(true)
     try {
-      await invoke('set_master_password', { password })
-      onUnlock()
+      const code = await invoke<string>('set_master_password', { password })
+      setRecoveryCode(code)
+      setViewMode('showRecovery')
     } catch (err) {
       setError(String(err))
     } finally {
@@ -69,66 +74,352 @@ export default function MasterPassword({ onUnlock }: MasterPasswordProps) {
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      if (isSetup) {
-        handleUnlock()
-      } else {
-        handleSetup()
+  const handleSaveRecoveryCode = async () => {
+    try {
+      const now = new Date()
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
+      const defaultName = `SecretWarehouse_${recoveryCode.replace(/-/g, '')}_Recovery_Key_${dateStr}.txt`
+
+      const filePath = await save({
+        defaultPath: defaultName,
+        filters: [{ name: 'Text', extensions: ['txt'] }]
+      })
+
+      if (filePath) {
+        const content = `SecretWarehouse 恢复码
+================================
+
+恢复码: ${recoveryCode}
+
+请妥善保管此恢复码，忘记主密码时可用于恢复数据。
+
+警告：
+- 此恢复码仅显示一次，请立即保存
+- 不要将此文件存储在云端或共享位置
+- 建议打印并保存在安全的地方
+
+生成时间: ${now.toLocaleString()}
+`
+        await writeTextFile(filePath, content)
       }
+    } catch (err) {
+      console.error('Failed to save recovery code:', err)
     }
   }
 
-  if (isSetup === null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-800">
-        <div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
+  const handleCopyRecoveryCode = async () => {
+    try {
+      await navigator.clipboard.writeText(recoveryCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-800">
-      <div className="w-full max-w-md mx-4">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700/60 p-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <Key className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">SecretWarehouse</h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-2">
-              {isSetup ? '输入主密码解锁' : '设置主密码以保护您的数据'}
-            </p>
-          </div>
+  const handleContinueAfterRecovery = () => {
+    onUnlock()
+  }
 
-          {/* Form */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                {isSetup ? '主密码' : '设置主密码'}
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={isSetup ? '输入主密码' : '至少8位字符'}
-                  className="w-full pl-11 pr-11 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  autoFocus
-                />
-                <button
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+  const handleForgotPassword = async () => {
+    setError('')
+    setLoading(true)
+
+    try {
+      const success = await invoke<boolean>('unlock_with_recovery_code', { recoveryCode: recoveryInput })
+      if (success) {
+        setViewMode('resetPassword')
+      } else {
+        setError('恢复码错误')
+      }
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResetPassword = async () => {
+    setError('')
+
+    if (newPassword !== confirmNewPassword) {
+      setError('两次输入的密码不一致')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await invoke('reset_password_with_recovery', {
+        recoveryCode: recoveryInput,
+        newPassword
+      })
+      onUnlock()
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.key === 'Enter') {
+      action()
+    }
+  }
+
+  const renderContent = () => {
+    switch (viewMode) {
+      case 'loading':
+        return (
+          <div className="flex justify-center py-12">
+            <div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )
+
+      case 'showRecovery':
+        return (
+          <>
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
+                <Key className="w-10 h-10 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">保存恢复码</h1>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">
+                忘记密码时可用恢复码恢复数据
+              </p>
+            </div>
+
+            {/* Recovery Code */}
+            <div className="mb-6">
+              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                <p className="text-sm text-amber-700 dark:text-amber-400 font-medium mb-2">您的恢复码</p>
+                <div className="flex items-center justify-between">
+                  <code className="text-2xl font-mono font-bold text-amber-800 dark:text-amber-300 tracking-wider">
+                    {recoveryCode}
+                  </code>
+                  <button
+                    onClick={handleCopyRecoveryCode}
+                    className="p-2 text-amber-600 hover:text-amber-700 dark:text-amber-400"
+                    title="复制"
+                  >
+                    {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  <strong>重要：</strong>此恢复码仅显示一次，请立即保存！忘记密码且丢失恢复码将无法恢复数据。
+                </p>
               </div>
             </div>
 
-            {!isSetup && (
+            {/* Actions */}
+            <div className="space-y-3">
+              <button
+                onClick={handleSaveRecoveryCode}
+                className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2"
+              >
+                <Download className="w-5 h-5" />
+                <span>保存恢复码文件</span>
+              </button>
+
+              <button
+                onClick={handleContinueAfterRecovery}
+                className="w-full py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium rounded-xl transition-all"
+              >
+                我已保存，继续使用
+              </button>
+            </div>
+          </>
+        )
+
+      case 'forgotPassword':
+        return (
+          <>
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
+                <RefreshCw className="w-10 h-10 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">使用恢复码</h1>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">
+                输入您保存的恢复码
+              </p>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  恢复码
+                </label>
+                <input
+                  type="text"
+                  value={recoveryInput}
+                  onChange={(e) => setRecoveryInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => handleKeyDown(e, handleForgotPassword)}
+                  placeholder="XXXX-XXXX-XXXX"
+                  className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono text-lg tracking-wider text-center"
+                  autoFocus
+                />
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button
+                onClick={handleForgotPassword}
+                disabled={loading || recoveryInput.length < 14}
+                className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    <span>验证恢复码</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => setViewMode('unlock')}
+                className="w-full py-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 text-sm"
+              >
+                返回登录
+              </button>
+            </div>
+          </>
+        )
+
+      case 'resetPassword':
+        return (
+          <>
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg">
+                <Check className="w-10 h-10 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">设置新密码</h1>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">
+                恢复码验证成功，请设置新密码
+              </p>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  新密码
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, handleResetPassword)}
+                    placeholder="输入新密码"
+                    className="w-full pl-11 pr-11 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  确认新密码
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, handleResetPassword)}
+                    placeholder="再次输入新密码"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button
+                onClick={handleResetPassword}
+                disabled={loading || !newPassword || !confirmNewPassword}
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    <span>重置密码</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </>
+        )
+
+      case 'setup':
+        return (
+          <>
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                <Key className="w-10 h-10 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">SecretWarehouse</h1>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">
+                设置主密码以保护您的数据
+              </p>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  设置主密码
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, handleSetup)}
+                    placeholder="输入密码"
+                    className="w-full pl-11 pr-11 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   确认密码
@@ -139,45 +430,124 @@ export default function MasterPassword({ onUnlock }: MasterPasswordProps) {
                     type={showPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    onKeyDown={handleKeyDown}
+                    onKeyDown={(e) => handleKeyDown(e, handleSetup)}
                     placeholder="再次输入密码"
                     className="w-full pl-11 pr-4 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
                   />
                 </div>
               </div>
-            )}
 
-            {error && (
-              <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            <button
-              onClick={isSetup ? handleUnlock : handleSetup}
-              disabled={loading || !password || (!isSetup && !confirmPassword)}
-              className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  {isSetup ? <Lock className="w-5 h-5" /> : <Check className="w-5 h-5" />}
-                  <span>{isSetup ? '解锁' : '设置密码'}</span>
-                </>
+              {error && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
               )}
-            </button>
-          </div>
 
-          {/* Tips */}
-          {!isSetup && (
+              <button
+                onClick={handleSetup}
+                disabled={loading || !password || !confirmPassword}
+                className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    <span>创建账户</span>
+                  </>
+                )}
+              </button>
+            </div>
+
             <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                主密码用于加密您的所有数据。请牢记此密码，忘记后将无法恢复数据。
+                主密码用于加密您的所有数据。请牢记此密码，忘记后将无法恢复数据（除非您保存了恢复码）。
               </p>
             </div>
-          )}
+          </>
+        )
+
+      case 'unlock':
+      default:
+        return (
+          <>
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                <Key className="w-10 h-10 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">SecretWarehouse</h1>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">
+                输入主密码解锁
+              </p>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  主密码
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, handleUnlock)}
+                    placeholder="输入主密码"
+                    className="w-full pl-11 pr-11 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button
+                onClick={handleUnlock}
+                disabled={loading || !password}
+                className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Lock className="w-5 h-5" />
+                    <span>解锁</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => setViewMode('forgotPassword')}
+                className="w-full py-2 text-violet-500 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-300 text-sm"
+              >
+                忘记密码？使用恢复码
+              </button>
+            </div>
+          </>
+        )
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-slate-800">
+      <div className="w-full max-w-md mx-4">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700/60 p-8">
+          {renderContent()}
         </div>
       </div>
     </div>

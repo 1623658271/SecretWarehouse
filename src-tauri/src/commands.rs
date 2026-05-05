@@ -404,7 +404,7 @@ pub fn is_master_password_set() -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn set_master_password(password: String) -> Result<(), String> {
+pub fn set_master_password(password: String) -> Result<String, String> {
     crypto::set_master_password(&password)
 }
 
@@ -416,4 +416,23 @@ pub fn verify_master_password(password: String) -> Result<bool, String> {
 #[tauri::command]
 pub fn clear_encryption_key() {
     crypto::clear_encryption_key();
+}
+
+#[tauri::command]
+pub fn has_recovery_key() -> Result<bool, String> {
+    Ok(crypto::has_recovery_key())
+}
+
+#[tauri::command]
+pub fn unlock_with_recovery_code(recovery_code: String) -> Result<bool, String> {
+    match crypto::unlock_with_recovery_code(&recovery_code) {
+        Ok(_) => Ok(true),
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub fn reset_password_with_recovery(recovery_code: String, new_password: String) -> Result<(), String> {
+    let master_key = crypto::unlock_with_recovery_code(&recovery_code)?;
+    crypto::reset_password_with_master_key(master_key, &new_password)
 }

@@ -16,6 +16,8 @@ static MASTER_KEY: Mutex<Option<[u8; 32]>> = Mutex::new(None);
 const SALT_FILE: &str = "data/salt.key";
 const MASTER_KEY_FILE: &str = "data/master.key";
 const AUTH_VERIFY_FILE: &str = "data/auth.verify";
+const RECOVERY_KEY_FILE: &str = "data/recovery.key";
+const RECOVERY_SALT_FILE: &str = "data/recovery_salt.key";
 
 /// 检查是否已设置主密码
 pub fn is_master_password_set() -> bool {
@@ -32,6 +34,16 @@ fn derive_key_from_password(password: &str, salt: &[u8]) -> [u8; 32] {
     key
 }
 
+/// 从恢复码派生密钥
+fn derive_key_from_recovery_code(recovery_code: &str, salt: &[u8]) -> [u8; 32] {
+    // 移除格式字符（如 -）
+    let clean_code: String = recovery_code.chars().filter(|c| c.is_alphanumeric()).collect();
+    let mut key = [0u8; 32];
+    pbkdf2::pbkdf2::<Hmac<Sha256>>(clean_code.to_uppercase().as_bytes(), salt, 100_000, &mut key)
+        .expect("PBKDF2 derivation failed");
+    key
+}
+
 /// 生成随机盐值
 fn generate_salt() -> [u8; 32] {
     let mut salt = [0u8; 32];
@@ -44,6 +56,24 @@ fn generate_master_key() -> [u8; 32] {
     let mut key = [0u8; 32];
     OsRng.fill_bytes(&mut key);
     key
+}
+
+/// 生成12位随机恢复码（格式：XXXX-XXXX-XXXX）
+pub fn generate_recovery_code() -> String {
+    // 使用易辨认的字符（排除 0/O, 1/I/L 等易混淆字符）
+    const CHARS: &[u8] = b"23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    let mut code = String::with_capacity(14);
+    let mut rng = OsRng;
+
+    for i in 0..12 {
+        if i > 0 && i % 4 == 0 {
+            code.push('-');
+        }
+        let idx = (rng.next_u32() as usize) % CHARS.len();
+        code.push(CHARS[idx] as char);
+    }
+
+    code
 }
 
 /// 保存文件
@@ -63,16 +93,8 @@ fn load_file(path: &str) -> Result<Vec<u8>, String> {
 }
 
 /// 设置主密码（首次使用）
-/// 1. 生成随机盐值
-/// 2. 生成随机Master Key
-/// 3. 从密码派生加密密钥
-/// 4. 用派生密钥加密Master Key，保存到master.key
-/// 5. 保存盐值到salt.key
-/// 6. 保存验证信息到auth.verify
-pub fn set_master_password(password: &str) -> Result<(), String> {
-    if password.len() < 8 {
-        return Err("密码长度至少8位".to_string());
-    }
+/// 返回恢复码，用户必须备份
+pub fn set_master_password(password: &str) -> Result<String, String> {
     if is_master_password_set() {
         return Err("主密码已设置".to_string());
     }
@@ -89,29 +111,35 @@ pub fn set_master_password(password: &str) -> Result<(), String> {
     // 4. 用派生密钥加密Master Key
     let encrypted_master_key = encrypt_value(&BASE64.encode(master_key), &derived_key)?;
 
-    // 5. 保存盐值
+    // 5. 生成恢复码
+    let recovery_code = generate_recovery_code();
+
+    // 6. 生成恢复码盐值并派生密钥
+    let recovery_salt = generate_salt();
+    let recovery_key = derive_key_from_recovery_code(&recovery_code, &recovery_salt);
+
+    // 7. 用恢复码密钥加密Master Key
+    let encrypted_recovery_master_key = encrypt_value(&BASE64.encode(master_key), &recovery_key)?;
+
+    // 8. 保存所有文件
     save_file(SALT_FILE, &salt)?;
-
-    // 6. 保存加密的Master Key
     save_file(MASTER_KEY_FILE, encrypted_master_key.as_bytes())?;
+    save_file(RECOVERY_SALT_FILE, &recovery_salt)?;
+    save_file(RECOVERY_KEY_FILE, encrypted_recovery_master_key.as_bytes())?;
 
-    // 7. 保存验证信息（用于验证密码是否正确）
+    // 9. 保存验证信息（用于验证密码是否正确）
     let verify_data = "SecretWarehouse_MasterKey_Verify";
     let encrypted_verify = encrypt_value(verify_data, &derived_key)?;
     save_file(AUTH_VERIFY_FILE, encrypted_verify.as_bytes())?;
 
-    // 8. 设置全局Master Key
+    // 10. 设置全局Master Key
     let mut global_key = MASTER_KEY.lock().map_err(|e| e.to_string())?;
     *global_key = Some(master_key);
 
-    Ok(())
+    Ok(recovery_code)
 }
 
 /// 验证主密码
-/// 1. 读取盐值
-/// 2. 从密码派生密钥
-/// 3. 尝试解密auth.verify验证密码是否正确
-/// 4. 如果正确，解密master.key并设置到全局变量
 pub fn verify_master_password(password: &str) -> Result<bool, String> {
     // 1. 读取盐值
     let salt = load_file(SALT_FILE)?;
@@ -148,6 +176,72 @@ pub fn verify_master_password(password: &str) -> Result<bool, String> {
         }
         _ => Ok(false),
     }
+}
+
+/// 使用恢复码解锁并重置密码
+/// 返回 Master Key 以便设置新密码
+pub fn unlock_with_recovery_code(recovery_code: &str) -> Result<[u8; 32], String> {
+    // 1. 读取恢复码盐值
+    let recovery_salt = load_file(RECOVERY_SALT_FILE)?;
+
+    // 2. 从恢复码派生密钥
+    let recovery_key = derive_key_from_recovery_code(recovery_code, &recovery_salt);
+
+    // 3. 尝试解密恢复密钥文件
+    let encrypted_recovery_key = String::from_utf8(load_file(RECOVERY_KEY_FILE)?)
+        .map_err(|e| format!("读取恢复密钥文件失败: {}", e))?;
+
+    match decrypt_value(&encrypted_recovery_key, &recovery_key) {
+        Ok(master_key_base64) => {
+            let master_key_bytes = BASE64.decode(&master_key_base64)
+                .map_err(|e| format!("解码Master Key失败: {}", e))?;
+
+            if master_key_bytes.len() != 32 {
+                return Err("Master Key长度错误".to_string());
+            }
+
+            let mut master_key = [0u8; 32];
+            master_key.copy_from_slice(&master_key_bytes);
+
+            Ok(master_key)
+        }
+        Err(_) => Err("恢复码错误".to_string()),
+    }
+}
+
+/// 使用Master Key设置新密码
+pub fn reset_password_with_master_key(master_key: [u8; 32], new_password: &str) -> Result<(), String> {
+    // 1. 生成新的盐值
+    let salt = generate_salt();
+
+    // 2. 从新密码派生密钥
+    let derived_key = derive_key_from_password(new_password, &salt);
+
+    // 3. 用新派生密钥加密Master Key
+    let encrypted_master_key = encrypt_value(&BASE64.encode(master_key), &derived_key)?;
+
+    // 4. 生成新的恢复码
+    let recovery_code = generate_recovery_code();
+    let recovery_salt = generate_salt();
+    let recovery_key = derive_key_from_recovery_code(&recovery_code, &recovery_salt);
+    let encrypted_recovery_master_key = encrypt_value(&BASE64.encode(master_key), &recovery_key)?;
+
+    // 5. 更新验证信息
+    let verify_data = "SecretWarehouse_MasterKey_Verify";
+    let encrypted_verify = encrypt_value(verify_data, &derived_key)?;
+
+    // 6. 保存所有文件
+    save_file(SALT_FILE, &salt)?;
+    save_file(MASTER_KEY_FILE, encrypted_master_key.as_bytes())?;
+    save_file(RECOVERY_SALT_FILE, &recovery_salt)?;
+    save_file(RECOVERY_KEY_FILE, encrypted_recovery_master_key.as_bytes())?;
+    save_file(AUTH_VERIFY_FILE, encrypted_verify.as_bytes())?;
+
+    // 7. 设置全局Master Key
+    let mut global_key = MASTER_KEY.lock().map_err(|e| e.to_string())?;
+    *global_key = Some(master_key);
+
+    Ok(())
 }
 
 /// 获取当前Master Key
@@ -217,6 +311,12 @@ pub fn decrypt_fields(
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
+/// 检查是否有恢复密钥文件
+pub fn has_recovery_key() -> bool {
+    std::path::Path::new(RECOVERY_KEY_FILE).exists()
+        && std::path::Path::new(RECOVERY_SALT_FILE).exists()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,5 +340,12 @@ mod tests {
         let encrypted = encrypt_fields(&fields, &key).unwrap();
         let decrypted = decrypt_fields(&encrypted, &key).unwrap();
         assert_eq!(fields, decrypted);
+    }
+
+    #[test]
+    fn test_recovery_code() {
+        let code = generate_recovery_code();
+        assert_eq!(code.len(), 14); // XXXX-XXXX-XXXX
+        assert!(code.contains('-'));
     }
 }
