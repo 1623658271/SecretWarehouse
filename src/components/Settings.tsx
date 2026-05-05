@@ -268,7 +268,7 @@ export default function Settings() {
   }
 
   // Import database
-  const handleImport = async () => {
+  const handleImport = async (mode: 'overwrite' | 'incremental') => {
     try {
       const filePath = await open({
         filters: [{ name: 'Database', extensions: ['db'] }]
@@ -276,17 +276,17 @@ export default function Settings() {
 
       if (filePath && typeof filePath === 'string') {
         setDataStatus('importing')
-        setDataMessage('正在导入...')
+        setDataMessage(mode === 'overwrite' ? '正在覆盖导入...' : '正在增量导入...')
 
-        await invoke('import_database', { path: filePath })
+        const count = await invoke<number>('import_database', { path: filePath, mode })
         await fetchSecrets()
 
         setDataStatus('success')
-        setDataMessage('导入成功！')
+        setDataMessage(mode === 'overwrite' ? `覆盖导入成功！共 ${count} 条` : `增量导入成功！新增 ${count} 条`)
         setTimeout(() => {
           setDataStatus('idle')
           setDataMessage('')
-        }, 2000)
+        }, 3000)
       }
     } catch (err) {
       setDataStatus('error')
@@ -506,23 +506,49 @@ export default function Settings() {
             <div className="space-y-4">
               <SectionTitle icon={Database} title="数据" />
 
-              <div className="flex gap-3">
+              {/* Export */}
+              <div>
                 <button
                   onClick={handleExport}
                   disabled={dataStatus === 'exporting'}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   <Download className="w-4 h-4" />
                   <span>导出数据库</span>
                 </button>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                  备份所有数据到本地 .db 文件
+                </p>
+              </div>
+
+              {/* Import - Overwrite */}
+              <div>
                 <button
-                  onClick={handleImport}
+                  onClick={() => handleImport('overwrite')}
                   disabled={dataStatus === 'importing'}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   <Upload className="w-4 h-4" />
-                  <span>导入数据库</span>
+                  <span>覆盖导入</span>
                 </button>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                  替换当前所有数据，原有数据将被清除
+                </p>
+              </div>
+
+              {/* Import - Incremental */}
+              <div>
+                <button
+                  onClick={() => handleImport('incremental')}
+                  disabled={dataStatus === 'importing'}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>增量导入</span>
+                </button>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                  合并导入文件中的数据，跳过已存在的条目
+                </p>
               </div>
 
               {dataMessage && (
@@ -540,10 +566,6 @@ export default function Settings() {
                   <span>{dataMessage}</span>
                 </div>
               )}
-
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                导出将备份所有密码数据到本地文件，导入将替换当前所有数据。
-              </p>
             </div>
           </div>
 

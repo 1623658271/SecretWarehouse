@@ -307,13 +307,13 @@ pub fn export_database(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn import_database(state: State<'_, DbState>, path: String) -> Result<(), String> {
+pub fn import_database(state: State<'_, DbState>, path: String, mode: String) -> Result<usize, String> {
     // Verify the import file is a valid SQLite database
-    let test_conn = rusqlite::Connection::open(&path)
+    let import_conn = rusqlite::Connection::open(&path)
         .map_err(|e| format!("无法打开导入文件: {}", e))?;
 
     // Check if it has the expected tables
-    let table_exists: bool = test_conn.query_row(
+    let table_exists: bool = import_conn.query_row(
         "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='secrets'",
         [],
         |row| row.get(0)
@@ -322,22 +322,72 @@ pub fn import_database(state: State<'_, DbState>, path: String) -> Result<(), St
     if !table_exists {
         return Err("导入文件不是有效的数据库格式".to_string());
     }
-    drop(test_conn);
 
-    // Close current connection by locking the mutex
-    let mut conn = state.conn.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
+    if mode == "overwrite" {
+        // Overwrite mode: replace entire database
+        drop(import_conn);
+        let mut conn = state.conn.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
+        *conn = rusqlite::Connection::open_in_memory()
+            .map_err(|e| format!("创建临时连接失败: {}", e))?;
+        std::fs::copy(&path, "secret_warehouse.db")
+            .map_err(|e| format!("复制数据库文件失败: {}", e))?;
+        *conn = rusqlite::Connection::open("secret_warehouse.db")
+            .map_err(|e| format!("重新打开数据库失败: {}", e))?;
 
-    // Copy the imported file over the current database
-    *conn = rusqlite::Connection::open_in_memory()
-        .map_err(|e| format!("创建临时连接失败: {}", e))?;
+        // Count imported entries
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM secrets", [], |row| row.get(0))
+            .map_err(|e| format!("获取条目数量失败: {}", e))?;
+        Ok(count as usize)
+    } else {
+        // Incremental mode: merge data, skip existing IDs
+        let mut count = 0;
 
-    // Copy the imported file
-    std::fs::copy(&path, "secret_warehouse.db")
-        .map_err(|e| format!("复制数据库文件失败: {}", e))?;
+        // Get all secrets from import file
+        let imported_secrets: Vec<(String, String, String, String, String, String, i64, i64, i64)> = {
+            let mut stmt = import_conn.prepare(
+                "SELECT id, icon, title, description, encrypted_fields, tags, created_at, updated_at, favorite FROM secrets"
+            ).map_err(|e| format!("查询导入数据失败: {}", e))?;
 
-    // Reopen the database
-    *conn = rusqlite::Connection::open("secret_warehouse.db")
-        .map_err(|e| format!("重新打开数据库失败: {}", e))?;
+            let result = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, i64>(7)?,
+                    row.get::<_, i64>(8)?,
+                ))
+            }).map_err(|e| format!("读取导入数据失败: {}", e))?;
 
-    Ok(())
+            result.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("收集导入数据失败: {}", e))?
+        };
+
+        drop(import_conn);
+
+        let conn = state.conn.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
+
+        for (id, icon, title, description, encrypted_fields, tags, created_at, updated_at, favorite) in imported_secrets {
+            // Check if ID already exists
+            let exists: bool = conn.query_row(
+                "SELECT COUNT(*) > 0 FROM secrets WHERE id = ?1",
+                [&id],
+                |row| row.get(0)
+            ).unwrap_or(false);
+
+            if !exists {
+                // Insert new entry
+                conn.execute(
+                    "INSERT INTO secrets (id, icon, title, description, encrypted_fields, tags, created_at, updated_at, favorite) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    rusqlite::params![id, icon, title, description, encrypted_fields, tags, created_at, updated_at, favorite]
+                ).map_err(|e| format!("插入数据失败: {}", e))?;
+                count += 1;
+            }
+        }
+
+        Ok(count)
+    }
 }
