@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![SecretWarehouse Logo](docs/images/logo.png)
+<img src="docs/images/logo.png" alt="SecretWarehouse Logo" width="160">
 
 **安全、高效的本地密码管理器**
 
