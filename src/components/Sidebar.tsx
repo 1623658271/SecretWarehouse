@@ -106,7 +106,7 @@ export default function Sidebar() {
       </div>
 
       {/* Scrollable Tags Section */}
-      {allTags.length > 0 && (
+      {allTags.length > 0 ? (
         <>
           <div className="my-3 px-6">
             <div className="flex items-center gap-2">
@@ -137,6 +137,8 @@ export default function Sidebar() {
             ))}
           </nav>
         </>
+      ) : (
+        <div className="flex-1" />
       )}
 
       {/* Theme Switcher */}
