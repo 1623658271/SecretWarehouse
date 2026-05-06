@@ -3,7 +3,7 @@ use crate::db::DbState;
 use crate::models::*;
 use indexmap::IndexMap;
 use rand::Rng;
-use tauri::State;
+use tauri::{Manager, State};
 
 #[tauri::command]
 pub fn create_secret(
@@ -628,18 +628,14 @@ pub fn search_secrets_quick(state: State<'_, DbState>, query: String) -> Result<
     let results: Vec<QuickSearchResult> = secrets
         .into_iter()
         .map(|s| {
-            // 解密字段
-            let mut fields: Vec<FieldPreview> = Vec::new();
-            if let Some(master_key) = crypto::get_encryption_key() {
-                if let Ok(decrypted) = crypto::decrypt_fields(&s.encrypted_fields, &master_key) {
-                    for (name, _) in decrypted {
-                        fields.push(FieldPreview {
-                            name: name.clone(),
-                            value: "***".to_string(), // 隐藏实际值
-                        });
-                    }
-                }
-            }
+            // 字段已经在查询时解密，直接使用
+            let fields: Vec<FieldPreview> = s.fields
+                .keys()
+                .map(|name| FieldPreview {
+                    name: name.clone(),
+                    value: "***".to_string(), // 隐藏实际值
+                })
+                .collect();
 
             QuickSearchResult {
                 id: s.id,
@@ -665,14 +661,8 @@ pub fn copy_field_to_clipboard(
     // 获取条目
     let secret = state.get_secret(&secret_id)?;
 
-    // 解密字段
-    let master_key = crypto::get_encryption_key()
-        .ok_or_else(|| "未解锁，请先输入密码".to_string())?;
-
-    let decrypted = crypto::decrypt_fields(&secret.encrypted_fields, &master_key)?;
-
-    // 获取字段值
-    let value = decrypted.get(&field_name)
+    // 字段已经在查询时解密，直接获取
+    let value = secret.fields.get(&field_name)
         .ok_or_else(|| format!("字段 '{}' 不存在", field_name))?;
 
     // 复制到剪贴板

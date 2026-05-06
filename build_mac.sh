@@ -8,28 +8,39 @@ echo "=========================================="
 # 项目根目录
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIST_DIR="$PROJECT_DIR/dist_macos"
+ICONS_DIR="$PROJECT_DIR/src-tauri/icons"
 
 # 清理旧的构建产物
 echo ""
-echo "[1/4] 清理旧的构建产物..."
+echo "[1/5] 清理旧的构建产物..."
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/env"
 
+# 生成 macOS .icns 图标
+echo ""
+echo "[2/5] 生成 macOS 图标..."
+if [ -d "$ICONS_DIR/icon.iconset" ]; then
+    iconutil -c icns -o "$ICONS_DIR/icon.icns" "$ICONS_DIR/icon.iconset"
+    echo "  ✓ icon.icns 已生成"
+else
+    echo "  ⚠ icon.iconset 不存在，跳过 .icns 生成"
+fi
+
 # 构建前端
 echo ""
-echo "[2/4] 构建前端资源..."
+echo "[3/5] 构建前端资源..."
 cd "$PROJECT_DIR"
 npm run build
 
 # 构建 Tauri 应用
 echo ""
-echo "[3/4] 构建 macOS 应用..."
+echo "[4/5] 构建 macOS 应用..."
 cd "$PROJECT_DIR/src-tauri"
 cargo build --release
 
 # 复制构建产物
 echo ""
-echo "[4/4] 整理构建产物..."
+echo "[5/5] 整理构建产物..."
 
 # 复制配置文件到 env 目录
 cp "$PROJECT_DIR/src-tauri/tauri.conf.json" "$DIST_DIR/env/" 2>/dev/null || true

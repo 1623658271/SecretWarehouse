@@ -10,7 +10,8 @@ mod models;
 
 use db::DbState;
 use tauri::{
-    CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
+    CustomMenuItem, GlobalShortcutManager, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
+    SystemTrayMenuItem,
 };
 
 fn main() {
@@ -65,13 +66,14 @@ fn main() {
         .setup(|app| {
             // 注册全局快捷键 Ctrl+Shift+P
             let app_handle = app.handle();
-            app.global_shortcut().register("CommandOrControl+Shift+P", move || {
-                if let Some(window) = app_handle.get_window("main") {
-                    window.show().unwrap();
-                    window.set_focus().unwrap();
-                    let _ = window.emit("show-quick-search", ());
-                }
-            })?;
+            app.global_shortcut_manager()
+                .register("CommandOrControl+Shift+P", move || {
+                    if let Some(window) = app_handle.get_window("main") {
+                        window.show().unwrap();
+                        window.set_focus().unwrap();
+                        let _ = window.emit("show-quick-search", ());
+                    }
+                })?;
 
             // 窗口关闭时隐藏到托盘而不是退出
             if let Some(window) = app.get_window("main") {
