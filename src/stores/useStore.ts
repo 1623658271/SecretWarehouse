@@ -55,6 +55,7 @@ export interface PasswordCheckResult {
 interface AppState {
   // State
   secrets: SecretEntry[]
+  totalSecretsCount: number  // 总数量（不受筛选影响）
   selectedSecret: SecretEntry | null
   allTags: string[]  // 所有标签
   tagCounts: Record<string, number>  // 标签计数
@@ -85,6 +86,7 @@ interface AppState {
 
   // Actions
   fetchSecrets: (tag?: string) => Promise<void>
+  fetchTotalCount: () => Promise<void>
   fetchAllTags: () => Promise<void>
   fetchTagCounts: () => Promise<void>
   createSecret: (req: CreateSecretRequest) => Promise<void>
@@ -127,6 +129,7 @@ interface AppState {
 
 export const useStore = create<AppState>((set, get) => ({
   secrets: [],
+  totalSecretsCount: 0,
   selectedSecret: null,
   allTags: [],
   tagCounts: {},
@@ -155,6 +158,15 @@ export const useStore = create<AppState>((set, get) => ({
   passwordCheckResults: [],
   showPasswordCheckOnly: false,
 
+  fetchTotalCount: async () => {
+    try {
+      const count = await invoke<number>('get_total_secrets_count')
+      set({ totalSecretsCount: count })
+    } catch (err) {
+      console.error('Failed to fetch total count:', err)
+    }
+  },
+
   fetchSecrets: async (tag?: string) => {
     set({ isLoading: true, error: null })
     try {
@@ -168,6 +180,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ secrets, isLoading: false, selectedIds: new Set(), isSelectionMode: false })
       get().fetchAllTags()
       get().fetchTagCounts()
+      get().fetchTotalCount()
     } catch (err) {
       set({ error: String(err), isLoading: false })
     }

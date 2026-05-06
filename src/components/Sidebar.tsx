@@ -9,7 +9,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ username, onLogout, onSwitchUser }: SidebarProps) {
-  const { allTags, tagCounts, selectedTag, selectTag, setShowForm, setShowSettings, secrets, generateTestData, settings, setPasswordCheckResults, setShowPasswordCheckOnly } = useStore()
+  const { allTags, tagCounts, selectedTag, selectTag, setShowForm, setShowSettings, secrets, totalSecretsCount, generateTestData, settings, setPasswordCheckResults, setShowPasswordCheckOnly } = useStore()
   const [isGenerating, setIsGenerating] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showTestDialog, setShowTestDialog] = useState(false)
@@ -18,7 +18,7 @@ export default function Sidebar({ username, onLogout, onSwitchUser }: SidebarPro
   const [passwordResults, setPasswordResults] = useState<PasswordCheckResult[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const allCount = secrets.length
+  const allCount = totalSecretsCount
   const favoriteCount = secrets.filter(s => s.favorite).length
 
   // Close menu when clicking outside

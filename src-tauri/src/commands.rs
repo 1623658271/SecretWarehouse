@@ -49,6 +49,11 @@ pub fn list_secrets(
 }
 
 #[tauri::command]
+pub fn get_total_secrets_count(state: State<'_, DbState>) -> Result<i64, String> {
+    state.get_total_count()
+}
+
+#[tauri::command]
 pub fn update_secret(
     state: State<'_, DbState>,
     id: String,

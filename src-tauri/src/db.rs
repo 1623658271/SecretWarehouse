@@ -242,6 +242,16 @@ impl DbState {
         Ok(results)
     }
 
+    pub fn get_total_count(&self) -> Result<i64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM secrets",
+            [],
+            |row| row.get(0),
+        ).map_err(|e| format!("查询总数失败: {}", e))?;
+        Ok(count)
+    }
+
     pub fn update_secret(&self, req: UpdateSecretRequest) -> Result<SecretEntry, String> {
         let key = crypto::get_encryption_key();
 
