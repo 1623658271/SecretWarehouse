@@ -15,6 +15,7 @@ interface AppSettings {
   passwordCheckKeywords: string[]  // 密码检测关键词
   sortField: SortField  // 排序字段
   sortDirection: SortDirection  // 排序方向
+  passwordCheckMode: boolean  // 密码强度检测开关
 }
 
 const defaultSettings: AppSettings = {
@@ -27,6 +28,7 @@ const defaultSettings: AppSettings = {
   passwordCheckKeywords: ['密码', 'password', '口令', 'PIN'],
   sortField: 'updated_at',
   sortDirection: 'desc',
+  passwordCheckMode: false,
 }
 
 // Load settings from localStorage
@@ -91,7 +93,6 @@ interface AppState {
   // Password check filter
   passwordCheckResults: PasswordCheckResult[]
   showPasswordCheckOnly: boolean
-  passwordCheckMode: boolean  // 密码强度检测开关模式
 
   // Actions
   fetchSecrets: (tag?: string) => Promise<void>
@@ -135,7 +136,6 @@ interface AppState {
   // Password check actions
   setPasswordCheckResults: (results: PasswordCheckResult[]) => void
   setShowPasswordCheckOnly: (show: boolean) => void
-  setPasswordCheckMode: (mode: boolean) => void
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -169,7 +169,6 @@ export const useStore = create<AppState>((set, get) => ({
   // Password check filter
   passwordCheckResults: [],
   showPasswordCheckOnly: false,
-  passwordCheckMode: false,
 
   fetchTotalCount: async () => {
     try {
@@ -471,5 +470,4 @@ export const useStore = create<AppState>((set, get) => ({
   // Password check actions
   setPasswordCheckResults: (results) => set({ passwordCheckResults: results }),
   setShowPasswordCheckOnly: (show) => set({ showPasswordCheckOnly: show }),
-  setPasswordCheckMode: (mode) => set({ passwordCheckMode: mode }),
 }))

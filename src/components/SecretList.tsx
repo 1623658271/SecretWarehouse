@@ -9,7 +9,7 @@ export default function SecretList() {
     secrets, selectSecret, isLoading,
     isSelectionMode, selectedIds, toggleSelection,
     selectAll, clearSelection, deleteSecrets, settings,
-    passwordCheckMode, updateSettings
+    updateSettings
   } = useStore()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showSortMenu, setShowSortMenu] = useState(false)
@@ -17,7 +17,7 @@ export default function SecretList() {
   // Calculate password strength for all secrets when password check mode is enabled
   const passwordStrengthMap = useMemo(() => {
     const map = new Map<string, string>()
-    if (passwordCheckMode) {
+    if (settings.passwordCheckMode) {
       const keywords = settings.passwordCheckKeywords || ['密码', 'password', '口令', 'PIN']
       secrets.forEach(secret => {
         Object.entries(secret.fields).forEach(([key, value]) => {
@@ -36,7 +36,7 @@ export default function SecretList() {
       })
     }
     return map
-  }, [secrets, passwordCheckMode, settings.passwordCheckKeywords])
+  }, [secrets, settings.passwordCheckMode, settings.passwordCheckKeywords])
 
   // Helper function to compare by sort settings
   const compareBySortSettings = (a: SecretEntry, b: SecretEntry) => {
@@ -64,7 +64,7 @@ export default function SecretList() {
   const filteredSecrets = useMemo(() => {
     const sorted = [...secrets]
 
-    if (passwordCheckMode) {
+    if (settings.passwordCheckMode) {
       // Password check mode: items with detection first, then without
       const withDetection: SecretEntry[] = []
       const withoutDetection: SecretEntry[] = []
@@ -96,7 +96,7 @@ export default function SecretList() {
       sorted.sort(compareBySortSettings)
       return sorted
     }
-  }, [secrets, passwordCheckMode, passwordStrengthMap, settings.sortField, settings.sortDirection])
+  }, [secrets, settings.passwordCheckMode, passwordStrengthMap, settings.sortField, settings.sortDirection])
 
   const handleDoubleClick = (secret: SecretEntry) => {
     if (!isSelectionMode) {
@@ -244,7 +244,7 @@ export default function SecretList() {
                 isSelectionMode={isSelectionMode}
                 onDoubleClick={handleDoubleClick}
                 onClick={handleCardClick}
-                passwordStrength={passwordCheckMode ? passwordStrengthMap.get(secret.id) : undefined}
+                passwordStrength={settings.passwordCheckMode ? passwordStrengthMap.get(secret.id) : undefined}
               />
             ))}
           </div>

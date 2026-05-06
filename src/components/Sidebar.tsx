@@ -9,7 +9,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ username, onLogout, onSwitchUser }: SidebarProps) {
-  const { allTags, tagCounts, selectedTag, selectTag, setShowForm, setShowSettings, totalSecretsCount, favoritesCount, generateTestData, passwordCheckMode, setPasswordCheckMode } = useStore()
+  const { allTags, tagCounts, selectedTag, selectTag, setShowForm, setShowSettings, totalSecretsCount, favoritesCount, generateTestData, settings, updateSettings } = useStore()
   const [isGenerating, setIsGenerating] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showTestDialog, setShowTestDialog] = useState(false)
@@ -117,16 +117,16 @@ export default function Sidebar({ username, onLogout, onSwitchUser }: SidebarPro
           <span>{isGenerating ? '生成中...' : '生成测试数据'}</span>
         </button>
         <button
-          onClick={() => setPasswordCheckMode(!passwordCheckMode)}
+          onClick={() => updateSettings({ passwordCheckMode: !settings.passwordCheckMode })}
           className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-sm font-medium transition-colors"
         >
           <ShieldCheck className="w-4 h-4 text-slate-700 dark:text-slate-300" />
           <span className="text-slate-700 dark:text-slate-300">密码强度检测</span>
           <div className={`relative w-11 h-6 rounded-full transition-colors ${
-            passwordCheckMode ? 'bg-green-500' : 'bg-red-500'
+            settings.passwordCheckMode ? 'bg-green-500' : 'bg-red-500'
           }`}>
             <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-              passwordCheckMode ? 'translate-x-6' : 'translate-x-1'
+              settings.passwordCheckMode ? 'translate-x-6' : 'translate-x-1'
             }`} />
           </div>
         </button>
