@@ -9,6 +9,7 @@ interface AppSettings {
   windowSize: string  // 'maximized' | 'fullscreen' | 'WxH' format like '1920x1080' | 'custom'
   customWidth: number
   customHeight: number
+  passwordCheckKeywords: string[]  // 密码检测关键词
 }
 
 const defaultSettings: AppSettings = {
@@ -18,6 +19,7 @@ const defaultSettings: AppSettings = {
   windowSize: 'maximized',
   customWidth: 1200,
   customHeight: 800,
+  passwordCheckKeywords: ['密码', 'password', '口令', 'PIN'],
 }
 
 // Load settings from localStorage
@@ -40,6 +42,14 @@ const saveSettings = (settings: AppSettings) => {
   } catch (e) {
     console.error('Failed to save settings:', e)
   }
+}
+
+// Password check result type
+export interface PasswordCheckResult {
+  secretId: string
+  title: string
+  field: string
+  strength: string
 }
 
 interface AppState {
@@ -68,6 +78,10 @@ interface AppState {
   // Settings
   showSettings: boolean
   settings: AppSettings
+
+  // Password check filter
+  passwordCheckResults: PasswordCheckResult[]
+  showPasswordCheckOnly: boolean
 
   // Actions
   fetchSecrets: (tag?: string) => Promise<void>
@@ -105,6 +119,10 @@ interface AppState {
   setShowSettings: (show: boolean) => void
   updateSettings: (settings: Partial<AppSettings>) => void
   resetSettings: () => void
+
+  // Password check actions
+  setPasswordCheckResults: (results: PasswordCheckResult[]) => void
+  setShowPasswordCheckOnly: (show: boolean) => void
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -132,6 +150,10 @@ export const useStore = create<AppState>((set, get) => ({
   // Settings
   showSettings: false,
   settings: loadSettings(),
+
+  // Password check filter
+  passwordCheckResults: [],
+  showPasswordCheckOnly: false,
 
   fetchSecrets: async (tag?: string) => {
     set({ isLoading: true, error: null })
@@ -409,4 +431,8 @@ export const useStore = create<AppState>((set, get) => ({
     saveSettings(defaultSettings)
     set({ settings: defaultSettings })
   },
+
+  // Password check actions
+  setPasswordCheckResults: (results) => set({ passwordCheckResults: results }),
+  setShowPasswordCheckOnly: (show) => set({ showPasswordCheckOnly: show }),
 }))

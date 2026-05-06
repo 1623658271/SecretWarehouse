@@ -1,4 +1,4 @@
-import { useStore } from '../stores/useStore'
+import { useStore, PasswordCheckResult } from '../stores/useStore'
 import { Plus, Star, Layers, Settings, Lock, Database, Loader2, User, LogOut, RefreshCw, X, ShieldCheck } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 
@@ -9,13 +9,13 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ username, onLogout, onSwitchUser }: SidebarProps) {
-  const { allTags, tagCounts, selectedTag, selectTag, setShowForm, setShowSettings, secrets, generateTestData } = useStore()
+  const { allTags, tagCounts, selectedTag, selectTag, setShowForm, setShowSettings, secrets, generateTestData, settings, setPasswordCheckResults, setShowPasswordCheckOnly } = useStore()
   const [isGenerating, setIsGenerating] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showTestDialog, setShowTestDialog] = useState(false)
   const [testCount, setTestCount] = useState(10)
   const [showPasswordCheck, setShowPasswordCheck] = useState(false)
-  const [passwordResults, setPasswordResults] = useState<{ title: string; field: string; strength: string }[]>([])
+  const [passwordResults, setPasswordResults] = useState<PasswordCheckResult[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
 
   const allCount = secrets.length
@@ -46,20 +46,42 @@ export default function Sidebar({ username, onLogout, onSwitchUser }: SidebarPro
   }
 
   const handleCheckPasswords = () => {
-    const results: { title: string; field: string; strength: string }[] = []
+    const results: PasswordCheckResult[] = []
+    const keywords = settings.passwordCheckKeywords || ['密码', 'password', '口令', 'PIN']
 
     secrets.forEach(secret => {
       Object.entries(secret.fields).forEach(([key, value]) => {
-        // Match fields containing "密码" (password)
-        if (key.toLowerCase().includes('密码') || key.toLowerCase().includes('password')) {
+        // Check if field name matches any keyword
+        const matchesKeyword = keywords.some(keyword =>
+          key.toLowerCase().includes(keyword.toLowerCase())
+        )
+        if (matchesKeyword) {
           const strength = calculatePasswordStrength(value)
-          results.push({ title: secret.title, field: key, strength })
+          results.push({
+            secretId: secret.id,
+            title: secret.title,
+            field: key,
+            strength
+          })
         }
       })
     })
 
     setPasswordResults(results)
     setShowPasswordCheck(true)
+  }
+
+  const handleViewResults = () => {
+    setPasswordCheckResults(passwordResults)
+    setShowPasswordCheckOnly(true)
+    setShowPasswordCheck(false)
+    // Clear tag filter to show all checked items
+    selectTag(null)
+  }
+
+  const handleClearFilter = () => {
+    setShowPasswordCheckOnly(false)
+    setPasswordCheckResults([])
   }
 
   const calculatePasswordStrength = (password: string): string => {
@@ -177,13 +199,30 @@ export default function Sidebar({ username, onLogout, onSwitchUser }: SidebarPro
         </button>
       </div>
 
+      {/* Password Check Filter Banner */}
+      {useStore.getState().showPasswordCheckOnly && (
+        <div className="mx-3 mb-2 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-violet-700 dark:text-violet-300">
+              显示密码检测结果 ({useStore.getState().passwordCheckResults.length})
+            </span>
+            <button
+              onClick={handleClearFilter}
+              className="text-violet-500 hover:text-violet-700 dark:hover:text-violet-300"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Fixed Navigation - All Items & Favorites */}
       <div className="px-3 space-y-1">
         {/* All Items */}
         <button
-          onClick={() => selectTag(null)}
+          onClick={() => { selectTag(null); handleClearFilter() }}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-            selectedTag === null
+            selectedTag === null && !useStore.getState().showPasswordCheckOnly
               ? 'bg-slate-100 dark:bg-slate-800 text-violet-600 dark:text-violet-400'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-300'
           }`}
@@ -337,12 +376,22 @@ export default function Sidebar({ username, onLogout, onSwitchUser }: SidebarPro
                 </div>
               </div>
             )}
-            <button
-              onClick={() => setShowPasswordCheck(false)}
-              className="mt-4 w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-            >
-              关闭
-            </button>
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => setShowPasswordCheck(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+              >
+                关闭
+              </button>
+              {passwordResults.length > 0 && (
+                <button
+                  onClick={handleViewResults}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium transition-colors"
+                >
+                  查看
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

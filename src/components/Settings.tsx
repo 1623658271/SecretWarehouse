@@ -3,7 +3,7 @@ import { useStore } from '../stores/useStore'
 import { useTheme } from './ThemeProvider'
 import {
   X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Check, Star, Eye, Key,
-  Database, Download, Upload, Palette, AlignLeft, Grid3X3, Archive
+  Database, Download, Upload, Palette, AlignLeft, Grid3X3, Archive, ShieldCheck, Plus
 } from 'lucide-react'
 import { appWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/tauri'
@@ -162,6 +162,7 @@ export default function Settings({ username }: SettingsProps) {
   const heightInputRef = useRef<HTMLInputElement>(null)
   const [dataStatus, setDataStatus] = useState<'idle' | 'exporting' | 'importing' | 'success' | 'error'>('idle')
   const [dataMessage, setDataMessage] = useState('')
+  const [newKeyword, setNewKeyword] = useState('')
 
   // Show saved notification
   const handleUpdateSettings = (partial: Partial<typeof settings>) => {
@@ -370,6 +371,23 @@ export default function Settings({ username }: SettingsProps) {
     }
   }
 
+  // Add password check keyword
+  const handleAddKeyword = () => {
+    if (newKeyword.trim()) {
+      const keywords = settings.passwordCheckKeywords || []
+      if (!keywords.includes(newKeyword.trim())) {
+        handleUpdateSettings({ passwordCheckKeywords: [...keywords, newKeyword.trim()] })
+      }
+      setNewKeyword('')
+    }
+  }
+
+  // Remove password check keyword
+  const handleRemoveKeyword = (keyword: string) => {
+    const keywords = settings.passwordCheckKeywords || []
+    handleUpdateSettings({ passwordCheckKeywords: keywords.filter(k => k !== keyword) })
+  }
+
   if (!showSettings) return null
 
   return (
@@ -572,6 +590,61 @@ export default function Settings({ username }: SettingsProps) {
                 icon={<Space className="w-4 h-4 text-slate-400" />}
                 onChange={(value) => handleUpdateSettings({ spacing: value })}
               />
+            </div>
+
+            {/* 安全 Section */}
+            <div className="space-y-4">
+              <SectionTitle icon={ShieldCheck} title="安全" />
+
+              {/* Password Check Keywords */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <ShieldCheck className="w-4 h-4 text-slate-400" />
+                  <label className="text-sm text-slate-600 dark:text-slate-400">密码检测关键词</label>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                  字段名包含这些关键词时，将进行密码强度检测
+                </p>
+
+                {/* Keywords list */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {(settings.passwordCheckKeywords || []).map((keyword) => (
+                    <span
+                      key={keyword}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-lg text-sm"
+                    >
+                      {keyword}
+                      <button
+                        onClick={() => handleRemoveKeyword(keyword)}
+                        className="hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                {/* Add keyword input */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newKeyword}
+                    onChange={(e) => setNewKeyword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddKeyword()
+                    }}
+                    placeholder="输入新关键词"
+                    className="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                  <button
+                    onClick={handleAddKeyword}
+                    disabled={!newKeyword.trim()}
+                    className="px-3 py-2 bg-violet-500 hover:bg-violet-600 disabled:bg-slate-300 dark:disabled:bg-slate-600 text-white rounded-xl transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* 数据 Section */}

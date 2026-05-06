@@ -8,9 +8,27 @@ export default function SecretList() {
   const {
     secrets, selectSecret, isLoading,
     isSelectionMode, selectedIds, toggleSelection,
-    selectAll, clearSelection, deleteSecrets, settings
+    selectAll, clearSelection, deleteSecrets, settings,
+    showPasswordCheckOnly, passwordCheckResults
   } = useStore()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  // Filter secrets based on password check results if filter is active
+  const filteredSecrets = showPasswordCheckOnly
+    ? secrets.filter(s => passwordCheckResults.some(r => r.secretId === s.id))
+    : secrets
+
+  // Create a map of secret ID to password strength
+  const passwordStrengthMap = new Map<string, string>()
+  if (showPasswordCheckOnly) {
+    passwordCheckResults.forEach(result => {
+      const existing = passwordStrengthMap.get(result.secretId)
+      // Keep the weakest strength if there are multiple passwords
+      if (!existing || getStrengthPriority(result.strength) < getStrengthPriority(existing)) {
+        passwordStrengthMap.set(result.secretId, result.strength)
+      }
+    })
+  }
 
   const handleDoubleClick = (secret: SecretEntry) => {
     if (!isSelectionMode) {
@@ -78,17 +96,21 @@ export default function SecretList() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6" style={{ minHeight: 0, height: '100%' }}>
-        {secrets.length === 0 ? (
+        {filteredSecrets.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full px-6 text-center">
             <div className="w-20 h-20 rounded-2xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center mb-4">
               <Lock className="w-10 h-10 text-slate-400 dark:text-slate-600" />
             </div>
-            <p className="text-base font-medium text-slate-600 dark:text-slate-400 mb-1">暂无条目</p>
-            <p className="text-sm text-slate-500">点击"新增条目"开始添加</p>
+            <p className="text-base font-medium text-slate-600 dark:text-slate-400 mb-1">
+              {showPasswordCheckOnly ? '没有密码检测结果' : '暂无条目'}
+            </p>
+            <p className="text-sm text-slate-500">
+              {showPasswordCheckOnly ? '点击"密码强度检测"进行检测' : '点击"新增条目"开始添加'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" style={{ gap: `${settings.spacing}px` }}>
-            {secrets.map((secret, index) => (
+            {filteredSecrets.map((secret, index) => (
               <SecretCard
                 key={secret.id}
                 secret={secret}
@@ -97,6 +119,7 @@ export default function SecretList() {
                 isSelectionMode={isSelectionMode}
                 onDoubleClick={handleDoubleClick}
                 onClick={handleCardClick}
+                passwordStrength={showPasswordCheckOnly ? passwordStrengthMap.get(secret.id) : undefined}
               />
             ))}
           </div>
@@ -139,9 +162,10 @@ interface SecretCardProps {
   isSelectionMode: boolean
   onDoubleClick: (secret: SecretEntry) => void
   onClick: (secret: SecretEntry) => void
+  passwordStrength?: string
 }
 
-function SecretCard({ secret, index, isSelected, isSelectionMode, onDoubleClick, onClick }: SecretCardProps) {
+function SecretCard({ secret, index, isSelected, isSelectionMode, onDoubleClick, onClick, passwordStrength }: SecretCardProps) {
   const Icon = iconMap[secret.icon] || Key
   const gradientColor = iconColors[secret.icon] || 'from-yellow-400 to-amber-500'
   const preview = getPreview(secret.fields, secret.sensitiveFields)
@@ -151,13 +175,20 @@ function SecretCard({ secret, index, isSelected, isSelectionMode, onDoubleClick,
     <div
       onDoubleClick={() => onDoubleClick(secret)}
       onClick={() => onClick(secret)}
-      className={`group bg-white dark:bg-slate-800 rounded-2xl border transition-all duration-300 cursor-pointer hover:-translate-y-1 ${
+      className={`group bg-white dark:bg-slate-800 rounded-2xl border transition-all duration-300 cursor-pointer hover:-translate-y-1 relative ${
         isSelected
           ? 'border-violet-500 dark:border-violet-500 shadow-lg shadow-violet-500/20'
           : 'border-slate-200/80 dark:border-slate-700/50 hover:border-violet-300 dark:hover:border-violet-500/50 hover:shadow-xl hover:shadow-violet-500/10'
       }`}
       style={{ animationDelay: `${index * 50}ms`, padding: `${settings.cardSize / 4}px` }}
     >
+      {/* Password Strength Badge */}
+      {passwordStrength && (
+        <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-xs font-semibold ${getStrengthColor(passwordStrength)}`}>
+          {passwordStrength}
+        </div>
+      )}
+
       <div className="flex items-start" style={{ gap: `${settings.spacing}px` }}>
         {/* Selection checkbox */}
         {isSelectionMode && (
@@ -189,7 +220,7 @@ function SecretCard({ secret, index, isSelected, isSelectionMode, onDoubleClick,
             <p className="text-sm text-slate-500 dark:text-slate-400 truncate mt-1">{preview}</p>
           )}
         </div>
-        {!isSelectionMode && (
+        {!isSelectionMode && !passwordStrength && (
           <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
             <Eye className="w-4 h-4 text-violet-500" />
           </div>
@@ -236,4 +267,24 @@ function getPreview(fields: Record<string, string>, sensitiveFields: string[] = 
     }
   }
   return ''
+}
+
+function getStrengthColor(strength: string) {
+  switch (strength) {
+    case '弱': return 'text-red-500 bg-red-100 dark:bg-red-900/30'
+    case '中': return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30'
+    case '强': return 'text-green-500 bg-green-100 dark:bg-green-900/30'
+    case '非常强': return 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/30'
+    default: return 'text-gray-500 bg-gray-100 dark:bg-gray-900/30'
+  }
+}
+
+function getStrengthPriority(strength: string): number {
+  switch (strength) {
+    case '弱': return 0
+    case '中': return 1
+    case '强': return 2
+    case '非常强': return 3
+    default: return 4
+  }
 }
