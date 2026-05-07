@@ -39,7 +39,8 @@
         "icons/128x128.png",
         "icons/128x128@2x.png",
         "icons/SecretWarehouse.ico",
-        "icons/SecretWarehouse.png"
+        "icons/SecretWarehouse.png",
+        "icons/icon.icns"
       ]
     },
     "security": {
