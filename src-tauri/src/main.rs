@@ -23,6 +23,7 @@ fn create_quick_search_window(app: &tauri::AppHandle) -> tauri::Result<tauri::Wi
         WindowUrl::App("index.html#quick-search".into())
     };
 
+    // 默认位置（屏幕左上角附近），实际位置由前端根据用户设置动态调整
     WindowBuilder::new(app, "quick-search", url)
         .title("快速搜索")
         .inner_size(480.0, 400.0)
@@ -32,7 +33,7 @@ fn create_quick_search_window(app: &tauri::AppHandle) -> tauri::Result<tauri::Wi
         .transparent(false)
         .skip_taskbar(true)
         .visible(false)
-        .center()
+        .position(0.0, 0.0)
         .build()
 }
 

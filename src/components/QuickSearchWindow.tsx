@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { listen } from '@tauri-apps/api/event'
+import { appWindow } from '@tauri-apps/api/window'
 import { Search, Copy, Check, X, Eye, EyeOff, GripVertical } from 'lucide-react'
 import { useStore } from '../stores/useStore'
 import { iconMap } from '../constants/icons'
@@ -27,17 +28,26 @@ export default function QuickSearchWindow() {
   const inputRef = useRef<HTMLInputElement>(null)
   const settings = useStore((s) => s.settings)
 
-  // 应用自定义位置
+  // 应用窗口位置
   const applyCustomPosition = useCallback(async () => {
-    if (settings.quickSearchPositionMode === 'custom') {
-      try {
+    try {
+      if (settings.quickSearchPositionMode === 'custom') {
+        // 自定义位置模式
         await invoke('set_quick_search_position', {
           x: settings.quickSearchCustomX,
           y: settings.quickSearchCustomY
         })
-      } catch (err) {
-        console.error('Failed to set position:', err)
+      } else {
+        // 居中模式 - 计算屏幕中心位置
+        const [screenWidth, screenHeight] = await invoke<[number, number]>('get_screen_size')
+        const windowWidth = 480
+        const windowHeight = 400
+        const centerX = Math.round((screenWidth - windowWidth) / 2)
+        const centerY = Math.round((screenHeight - windowHeight) / 2)
+        await invoke('set_quick_search_position', { x: centerX, y: centerY })
       }
+    } catch (err) {
+      console.error('Failed to set position:', err)
     }
   }, [settings.quickSearchPositionMode, settings.quickSearchCustomX, settings.quickSearchCustomY])
 
@@ -149,24 +159,29 @@ export default function QuickSearchWindow() {
     }
   }, [handleClose])
 
+  // 处理拖动开始
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    // 只响应左键点击
+    if (e.button !== 0) return
+    appWindow.startDragging()
+  }, [])
+
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-slate-900 overflow-hidden" style={{ borderRadius: '12px' }}>
       {/* 拖动区域 - 顶部标题栏 */}
       <div
-        data-tauri-drag-region
-        className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 cursor-move"
+        onMouseDown={handleDragStart}
       >
         <div
           className="flex items-center gap-2 select-none"
-          data-tauri-drag-region
-          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+          onMouseDown={handleDragStart}
         >
           <GripVertical className="w-4 h-4 text-slate-400" />
           <Search className="w-4 h-4 text-violet-500" />
           <span className="text-xs font-medium text-slate-600 dark:text-slate-400">快速搜索</span>
         </div>
-        <div className="flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setShowPlaintext(!showPlaintext)}
             className={`p-1.5 rounded-md transition-all ${
