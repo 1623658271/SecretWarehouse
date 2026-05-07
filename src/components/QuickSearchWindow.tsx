@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { listen } from '@tauri-apps/api/event'
-import { appWindow } from '@tauri-apps/api/window'
 import { Search, Copy, Check, X, Eye, EyeOff, GripVertical } from 'lucide-react'
 import { iconMap } from '../constants/icons'
 
@@ -151,39 +150,22 @@ export default function QuickSearchWindow() {
     }
   }
 
-  // 拖动处理 - 只在标题栏非按钮区域触发
-  const onTitleBarMouseDown = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement
-    // 如果点击的是按钮或其子元素，不触发拖动
-    if (target.closest('button')) {
-      return
-    }
-    // 只响应左键
-    if (e.button === 0) {
-      appWindow.startDragging()
-    }
-  }
-
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-slate-900 overflow-hidden" style={{ borderRadius: '12px' }}>
-      {/* 标题栏 - 可拖动 */}
+      {/* 标题栏 - 使用 data-tauri-drag-region 实现拖动 */}
       <div
-        className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 cursor-move select-none"
-        onMouseDown={onTitleBarMouseDown}
+        data-tauri-drag-region
+        className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 select-none"
       >
-        <div className="flex items-center gap-2">
-          <GripVertical className="w-4 h-4 text-slate-400" />
-          <Search className="w-4 h-4 text-violet-500" />
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-400">快速搜索</span>
+        <div className="flex items-center gap-2" data-tauri-drag-region>
+          <GripVertical className="w-4 h-4 text-slate-400" data-tauri-drag-region />
+          <Search className="w-4 h-4 text-violet-500" data-tauri-drag-region />
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-400" data-tauri-drag-region>快速搜索</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowPlaintext(!showPlaintext)
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => setShowPlaintext(!showPlaintext)}
             className={`p-1.5 rounded-md transition-all ${
               showPlaintext
                 ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400'
@@ -195,11 +177,7 @@ export default function QuickSearchWindow() {
           </button>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              hideWindow()
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
+            onClick={hideWindow}
             className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
             title="关闭"
           >
