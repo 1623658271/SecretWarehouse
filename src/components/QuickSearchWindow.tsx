@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { listen } from '@tauri-apps/api/event'
 import { appWindow } from '@tauri-apps/api/window'
 import { Search, Copy, Check, X, Eye, EyeOff, GripVertical } from 'lucide-react'
-import { useStore } from '../stores/useStore'
 import { iconMap } from '../constants/icons'
 
 interface FieldPreview {
@@ -19,77 +18,106 @@ interface QuickSearchResult {
   fields: FieldPreview[]
 }
 
+// 从 localStorage 读取设置
+function getSettings() {
+  try {
+    const saved = localStorage.getItem('secret-warehouse-settings')
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load settings:', e)
+  }
+  return {
+    quickSearchPositionMode: 'center',
+    quickSearchCustomX: 720,
+    quickSearchCustomY: 340,
+    clipboardClearSeconds: 30,
+  }
+}
+
 export default function QuickSearchWindow() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<QuickSearchResult[]>([])
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showPlaintext, setShowPlaintext] = useState(false)
+  const [clipboardSeconds, setClipboardSeconds] = useState(30)
   const inputRef = useRef<HTMLInputElement>(null)
-  const settings = useStore((s) => s.settings)
 
-  // 应用窗口位置 - 直接从store读取最新设置
-  const applyPosition = async () => {
+  // 设置窗口位置
+  const setWindowPosition = useCallback(async () => {
     try {
-      const currentSettings = useStore.getState().settings
-      if (currentSettings.quickSearchPositionMode === 'custom') {
+      const settings = getSettings()
+      if (settings.quickSearchPositionMode === 'custom') {
         await invoke('set_quick_search_position', {
-          x: currentSettings.quickSearchCustomX,
-          y: currentSettings.quickSearchCustomY
+          x: settings.quickSearchCustomX,
+          y: settings.quickSearchCustomY
         })
       } else {
-        // 居中模式
-        const [screenWidth, screenHeight] = await invoke<[number, number]>('get_screen_size')
-        const centerX = Math.round((screenWidth - 480) / 2)
-        const centerY = Math.round((screenHeight - 400) / 2)
-        await invoke('set_quick_search_position', { x: centerX, y: centerY })
+        const [sw, sh] = await invoke<[number, number]>('get_screen_size')
+        const x = Math.round((sw - 480) / 2)
+        const y = Math.round((sh - 400) / 2)
+        await invoke('set_quick_search_position', { x, y })
       }
     } catch (err) {
-      console.error('Failed to set position:', err)
+      console.error('Position error:', err)
     }
-  }
+  }, [])
 
-  const handleClose = async () => {
-    try {
-      await invoke('hide_quick_search_window')
-    } catch (err) {
-      console.error('Failed to hide window:', err)
-    }
-  }
+  // 隐藏窗口
+  const hideWindow = useCallback(async () => {
+    await invoke('hide_quick_search_window')
+  }, [])
 
-  const handleFocusInput = async () => {
-    setQuery('')
-    setResults([])
-    setCopiedField(null)
-    // 先设置位置，再聚焦输入框
-    await applyPosition()
-    setTimeout(() => inputRef.current?.focus(), 50)
-  }
-
-  // 检查是否有活动会话
+  // 初始化和事件监听
   useEffect(() => {
-    const checkSession = async () => {
+    // 加载剪贴板设置
+    const settings = getSettings()
+    setClipboardSeconds(settings.clipboardClearSeconds || 30)
+
+    // 检查会话并设置位置
+    const init = async () => {
       try {
-        await invoke<number>('get_total_secrets_count')
-        // 初始显示时设置位置
-        await applyPosition()
+        await invoke('get_total_secrets_count')
+        await setWindowPosition()
         inputRef.current?.focus()
       } catch {
-        await handleClose()
+        await hideWindow()
       }
     }
-    checkSession()
-  }, [])
+    init()
 
-  // 监听 focus-input 事件
-  useEffect(() => {
-    const unlisten = listen('focus-input', () => {
-      handleFocusInput()
+    // 监听 focus-input 事件
+    const unlistenFocus = listen('focus-input', async () => {
+      setQuery('')
+      setResults([])
+      setCopiedField(null)
+      await setWindowPosition()
+      setTimeout(() => inputRef.current?.focus(), 50)
     })
-    return () => {
-      unlisten.then(fn => fn())
+
+    // 监听失去焦点
+    const unlistenBlur = listen('tauri://blur', () => {
+      setTimeout(() => hideWindow(), 200)
+    })
+
+    // 键盘事件
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        hideWindow()
+      }
     }
-  }, [])
+    document.addEventListener('keydown', handleKey, true)
+
+    return () => {
+      unlistenFocus.then(fn => fn())
+      unlistenBlur.then(fn => fn())
+      document.removeEventListener('keydown', handleKey, true)
+    }
+  }, [setWindowPosition, hideWindow])
 
   // 搜索
   useEffect(() => {
@@ -97,94 +125,71 @@ export default function QuickSearchWindow() {
       setResults([])
       return
     }
-
     const timer = setTimeout(async () => {
       setIsLoading(true)
       try {
         const res = await invoke<QuickSearchResult[]>('search_secrets_quick', {
           query: query.trim(),
-          showPlaintext: showPlaintext
+          showPlaintext
         })
         setResults(res)
       } catch (err) {
-        console.error('Search failed:', err)
+        console.error('Search error:', err)
         setResults([])
       }
       setIsLoading(false)
     }, 200)
-
     return () => clearTimeout(timer)
   }, [query, showPlaintext])
 
+  // 复制字段
   const handleCopy = async (secretId: string, fieldName: string) => {
     try {
       await invoke('copy_field_to_clipboard', {
         secretId,
         fieldName,
-        clearSeconds: settings.clipboardClearSeconds,
+        clearSeconds: clipboardSeconds,
       })
       setCopiedField(`${secretId}-${fieldName}`)
       setTimeout(() => setCopiedField(null), 2000)
     } catch (err) {
-      console.error('Copy failed:', err)
+      console.error('Copy error:', err)
     }
   }
 
-  // 键盘事件处理
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        handleClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown, true)
-    return () => document.removeEventListener('keydown', handleKeyDown, true)
-  }, [])
-
-  // 失去焦点时隐藏窗口
-  useEffect(() => {
-    const unlisten = listen('tauri://blur', () => {
-      setTimeout(() => {
-        handleClose()
-      }, 200)
-    })
-    return () => {
-      unlisten.then(fn => fn())
-    }
-  }, [])
-
-  // 处理拖动 - 使用Tauri API
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // 只响应左键，且不在按钮上
-    if (e.button !== 0) return
+  // 拖动处理 - 只在标题栏非按钮区域触发
+  const onTitleBarMouseDown = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement
-    if (target.closest('button')) return
-    appWindow.startDragging()
+    // 如果点击的是按钮或其子元素，不触发拖动
+    if (target.closest('button')) {
+      return
+    }
+    // 只响应左键
+    if (e.button === 0) {
+      appWindow.startDragging()
+    }
   }
 
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-slate-900 overflow-hidden" style={{ borderRadius: '12px' }}>
-      {/* 拖动区域 - 顶部标题栏 */}
-      {/* 使用CSS -webkit-app-region 作为主要拖动方式，兼容Windows */}
+      {/* 标题栏 - 可拖动 */}
       <div
-        className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 select-none"
-        style={{ WebkitAppRegion: 'drag', cursor: 'move' } as React.CSSProperties}
-        onMouseDown={handleMouseDown}
+        className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 cursor-move select-none"
+        onMouseDown={onTitleBarMouseDown}
       >
         <div className="flex items-center gap-2">
           <GripVertical className="w-4 h-4 text-slate-400" />
           <Search className="w-4 h-4 text-violet-500" />
           <span className="text-xs font-medium text-slate-600 dark:text-slate-400">快速搜索</span>
         </div>
-        {/* 按钮区域设置为不可拖动 */}
-        <div
-          className="flex items-center gap-1"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
+        <div className="flex items-center gap-1">
           <button
-            onClick={() => setShowPlaintext(!showPlaintext)}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowPlaintext(!showPlaintext)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
             className={`p-1.5 rounded-md transition-all ${
               showPlaintext
                 ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400'
@@ -195,15 +200,21 @@ export default function QuickSearchWindow() {
             {showPlaintext ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
           </button>
           <button
-            onClick={handleClose}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              hideWindow()
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
             className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+            title="关闭"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      {/* 搜索输入框 */}
+      {/* 搜索框 */}
       <div className="p-3 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-3 px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl">
           <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
@@ -217,6 +228,7 @@ export default function QuickSearchWindow() {
           />
           {query && (
             <button
+              type="button"
               onClick={() => setQuery('')}
               className="p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
             >
@@ -226,7 +238,7 @@ export default function QuickSearchWindow() {
         </div>
       </div>
 
-      {/* 搜索结果 */}
+      {/* 结果列表 */}
       <div className="flex-1 overflow-y-auto">
         {isLoading && (
           <div className="flex items-center justify-center py-12">
@@ -243,7 +255,6 @@ export default function QuickSearchWindow() {
 
         {!isLoading && results.map((result) => (
           <div key={result.id} className="border-b border-slate-100 dark:border-slate-700/50 last:border-0">
-            {/* 条目标题 */}
             <div className="flex items-center gap-3 px-4 py-3 bg-slate-50/50 dark:bg-slate-800/30">
               <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${getIconColor(result.icon)} flex items-center justify-center flex-shrink-0 shadow-sm`}>
                 {getIcon(result.icon)}
@@ -255,11 +266,11 @@ export default function QuickSearchWindow() {
                 )}
               </div>
             </div>
-            {/* 字段列表 */}
             <div className="px-3 py-1">
               {result.fields.map((field) => (
                 <button
                   key={field.name}
+                  type="button"
                   onClick={() => handleCopy(result.id, field.name)}
                   className="w-full flex items-center justify-between px-3 py-2 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg transition-colors group"
                 >
@@ -307,9 +318,9 @@ export default function QuickSearchWindow() {
               找到 <span className="font-medium text-violet-600 dark:text-violet-400">{results.length}</span> 个结果
             </span>
           )}
-          {settings.clipboardClearSeconds > 0 && (
+          {clipboardSeconds > 0 && (
             <span className="text-xs text-slate-400 dark:text-slate-500">
-              复制后 {settings.clipboardClearSeconds}秒 清除剪贴板
+              复制后 {clipboardSeconds}秒 清除剪贴板
             </span>
           )}
         </div>
