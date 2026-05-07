@@ -26,7 +26,7 @@ fn create_quick_search_window(app: &tauri::AppHandle) -> tauri::Result<tauri::Wi
     WindowBuilder::new(app, "quick-search", url)
         .title("快速搜索")
         .inner_size(480.0, 400.0)
-        .resizable(false)
+        .resizable(true)
         .decorations(false)
         .always_on_top(true)
         .transparent(false)

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/tauri'
 import { listen } from '@tauri-apps/api/event'
+import { getCurrent } from '@tauri-apps/api/window'
 import { Search, Copy, Check, X, Eye, EyeOff, Move } from 'lucide-react'
 import { useStore } from '../stores/useStore'
 import { iconMap } from '../constants/icons'
@@ -69,6 +70,11 @@ export default function QuickSearchWindow() {
     }
     checkSession()
   }, [handleClose])
+
+  // 初始应用位置
+  useEffect(() => {
+    applyCustomPosition()
+  }, [applyCustomPosition])
 
   // 监听 focus-input 事件
   useEffect(() => {
@@ -144,6 +150,26 @@ export default function QuickSearchWindow() {
     }
   }, [handleClose])
 
+  // 开始拖动窗口
+  const startDrag = useCallback(async (e: React.MouseEvent) => {
+    // 只响应左键点击
+    if (e.button !== 0) return
+
+    const target = e.target as HTMLElement
+    // 只在拖动区域触发
+    if (!target.hasAttribute('data-tauri-drag-region') &&
+        !target.closest('[data-tauri-drag-region]')) {
+      return
+    }
+
+    try {
+      const win = getCurrent()
+      await win.startDragging()
+    } catch (err) {
+      console.error('Failed to start dragging:', err)
+    }
+  }, [])
+
   return (
     <div
       className="h-screen flex flex-col bg-white dark:bg-slate-900 overflow-hidden select-none"
@@ -151,13 +177,14 @@ export default function QuickSearchWindow() {
     >
       {/* 拖动区域 - 顶部标题栏 */}
       <div
-        className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700"
+        className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 cursor-move"
         data-tauri-drag-region
+        onMouseDown={startDrag}
       >
         <div className="flex items-center gap-2" data-tauri-drag-region>
-          <Move className="w-3.5 h-3.5 text-slate-400 cursor-move" />
+          <Move className="w-3.5 h-3.5 text-slate-400" />
           <Search className="w-4 h-4 text-violet-500" />
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-400">快速搜索</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-400" data-tauri-drag-region>快速搜索</span>
         </div>
         <div className="flex items-center gap-1">
           <button

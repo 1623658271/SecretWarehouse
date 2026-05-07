@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useStore } from '../stores/useStore'
 import { useTheme } from './ThemeProvider'
 import {
   X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Check, Star, Eye, Key,
   Database, Download, Upload, Palette, AlignLeft, Grid3X3, Archive, ShieldCheck, Plus, PanelBottom,
-  Crosshair, Move
+  Crosshair, Move, CheckCircle
 } from 'lucide-react'
 import { appWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/tauri'
@@ -141,95 +141,127 @@ function SliderWithInput({ label, value, min, max, step = 1, unit, onChange, ico
   )
 }
 
-// Position picker component
+// Full screen position picker component
 interface PositionPickerProps {
   x: number
   y: number
   screenWidth: number
   screenHeight: number
   onChange: (x: number, y: number) => void
+  onClose: () => void
 }
 
-function PositionPicker({ x, y, screenWidth, screenHeight, onChange }: PositionPickerProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+function FullScreenPositionPicker({ x, y, screenWidth, screenHeight, onChange, onClose }: PositionPickerProps) {
+  const [position, setPosition] = useState({ x, y })
   const [isDragging, setIsDragging] = useState(false)
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true)
-    updatePosition(e)
-  }
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging) return
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      updatePosition(e)
-    }
-  }
+    // Scale mouse position to screen coordinates
+    const scaleX = screenWidth / window.innerWidth
+    const scaleY = screenHeight / window.innerHeight
 
-  const handleMouseUp = () => {
-    setIsDragging(false)
-  }
-
-  const updatePosition = (e: React.MouseEvent) => {
-    if (!containerRef.current) return
-    const rect = containerRef.current.getBoundingClientRect()
-    const relX = e.clientX - rect.left
-    const relY = e.clientY - rect.top
-
-    // Scale to screen coordinates
-    const scaledX = Math.round((relX / rect.width) * screenWidth)
-    const scaledY = Math.round((relY / rect.height) * screenHeight)
+    const newX = Math.round(e.clientX * scaleX - 240)  // Center window on cursor
+    const newY = Math.round(e.clientY * scaleY - 200)
 
     // Clamp values
-    const clampedX = Math.max(0, Math.min(screenWidth - 480, scaledX))
-    const clampedY = Math.max(0, Math.min(screenHeight - 400, scaledY))
+    const clampedX = Math.max(0, Math.min(screenWidth - 480, newX))
+    const clampedY = Math.max(0, Math.min(screenHeight - 400, newY))
 
-    onChange(clampedX, clampedY)
+    setPosition({ x: clampedX, y: clampedY })
+  }, [isDragging, screenWidth, screenHeight])
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove)
+      window.addEventListener('mouseup', handleMouseUp)
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, handleMouseMove, handleMouseUp])
+
+  const handleConfirm = () => {
+    onChange(position.x, position.y)
+    onClose()
   }
 
-  // Window dimensions (QuickSearch is 480x400)
-  const windowWidthPercent = (480 / screenWidth) * 100
-  const windowHeightPercent = (400 / screenHeight) * 100
-  const windowXPercent = (x / screenWidth) * 100
-  const windowYPercent = (y / screenHeight) * 100
+  const handleClick = (e: React.MouseEvent) => {
+    if (isDragging) return
+
+    const scaleX = screenWidth / window.innerWidth
+    const scaleY = screenHeight / window.innerHeight
+
+    const newX = Math.round(e.clientX * scaleX - 240)
+    const newY = Math.round(e.clientY * scaleY - 200)
+
+    const clampedX = Math.max(0, Math.min(screenWidth - 480, newX))
+    const clampedY = Math.max(0, Math.min(screenHeight - 400, newY))
+
+    setPosition({ x: clampedX, y: clampedY })
+  }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-        <span>点击或拖动设置位置</span>
-        <span>{x}, {y}</span>
+    <div className="fixed inset-0 z-[100] bg-black/80 cursor-crosshair" onClick={handleClick}>
+      {/* Instructions */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 px-6 py-3 rounded-full shadow-lg">
+        <p className="text-sm text-slate-700 dark:text-slate-300">
+          点击或拖动选择位置，然后点击确认
+        </p>
       </div>
+
+      {/* Preview window */}
       <div
-        ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className="relative w-full aspect-video bg-slate-200 dark:bg-slate-700 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 cursor-crosshair overflow-hidden"
+        className="absolute bg-white dark:bg-slate-800 rounded-lg shadow-2xl border-2 border-violet-500 opacity-80 pointer-events-none"
+        style={{
+          left: `${(position.x / screenWidth) * 100}%`,
+          top: `${(position.y / screenHeight) * 100}%`,
+          width: '480px',
+          height: '400px',
+        }}
       >
-        {/* Screen representation */}
-        <div className="absolute inset-1 bg-slate-100 dark:bg-slate-800 rounded">
-          {/* Window indicator */}
-          <div
-            className="absolute bg-violet-500/30 border-2 border-violet-500 rounded flex items-center justify-center transition-all duration-75"
-            style={{
-              left: `${windowXPercent}%`,
-              top: `${windowYPercent}%`,
-              width: `${windowWidthPercent}%`,
-              height: `${windowHeightPercent}%`,
-            }}
-          >
-            <Move className="w-3 h-3 text-violet-600 dark:text-violet-400" />
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <Move className="w-12 h-12 text-violet-500 mx-auto mb-2" />
+            <p className="text-violet-600 dark:text-violet-400 font-medium">快速搜索浮窗</p>
+            <p className="text-xs text-slate-500 mt-1">位置: {position.x}, {position.y}</p>
           </div>
         </div>
-        {/* Corner markers */}
-        <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-slate-400 dark:border-slate-500" />
-        <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-slate-400 dark:border-slate-500" />
-        <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-slate-400 dark:border-slate-500" />
-        <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-slate-400 dark:border-slate-500" />
       </div>
-      <div className="flex justify-between text-[10px] text-slate-400">
-        <span>0, 0</span>
-        <span>{screenWidth} × {screenHeight}</span>
+
+      {/* Bottom controls */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
+        <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-lg shadow-lg">
+          <span className="text-sm text-slate-600 dark:text-slate-400">
+            X: <span className="font-mono text-violet-600">{position.x}</span>, Y: <span className="font-mono text-violet-600">{position.y}</span>
+          </span>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            handleConfirm()
+          }}
+          className="flex items-center gap-2 px-6 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg shadow-lg transition-colors"
+        >
+          <CheckCircle className="w-5 h-5" />
+          <span>确认位置</span>
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onClose()
+          }}
+          className="flex items-center gap-2 px-6 py-2 bg-slate-500 hover:bg-slate-600 text-white rounded-lg shadow-lg transition-colors"
+        >
+          <X className="w-5 h-5" />
+          <span>取消</span>
+        </button>
       </div>
     </div>
   )
@@ -259,6 +291,7 @@ export default function Settings({ username }: SettingsProps) {
   const [dataMessage, setDataMessage] = useState('')
   const [newKeyword, setNewKeyword] = useState('')
   const [screenSize, setScreenSize] = useState({ width: 1920, height: 1080 })
+  const [showPositionPicker, setShowPositionPicker] = useState(false)
 
   // Show saved notification
   const handleUpdateSettings = (partial: Partial<typeof settings>) => {
@@ -282,7 +315,14 @@ export default function Settings({ username }: SettingsProps) {
     handleUpdateSettings({ quickSearchPositionMode: mode })
     if (mode === 'custom') {
       await fetchScreenSize()
+      setShowPositionPicker(true)
     }
+  }
+
+  // Open position picker
+  const openPositionPicker = async () => {
+    await fetchScreenSize()
+    setShowPositionPicker(true)
   }
 
   // Handle position change
@@ -881,15 +921,23 @@ export default function Settings({ username }: SettingsProps) {
 
               {/* Custom Position Picker */}
               {settings.quickSearchPositionMode === 'custom' && (
-                <div>
-                  <PositionPicker
-                    x={settings.quickSearchCustomX}
-                    y={settings.quickSearchCustomY}
-                    screenWidth={screenSize.width}
-                    screenHeight={screenSize.height}
-                    onChange={handlePositionChange}
-                  />
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                    <div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">当前位置</div>
+                      <div className="text-sm font-mono text-violet-600 dark:text-violet-400">
+                        X: {settings.quickSearchCustomX}, Y: {settings.quickSearchCustomY}
+                      </div>
+                    </div>
+                    <button
+                      onClick={openPositionPicker}
+                      className="flex items-center gap-2 px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Crosshair className="w-4 h-4" />
+                      <span>设置位置</span>
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     浮窗大小: 480 × 400 像素
                   </p>
                 </div>
@@ -1087,6 +1135,18 @@ export default function Settings({ username }: SettingsProps) {
           </div>
         </div>
       </div>
+
+      {/* Full Screen Position Picker */}
+      {showPositionPicker && (
+        <FullScreenPositionPicker
+          x={settings.quickSearchCustomX}
+          y={settings.quickSearchCustomY}
+          screenWidth={screenSize.width}
+          screenHeight={screenSize.height}
+          onChange={handlePositionChange}
+          onClose={() => setShowPositionPicker(false)}
+        />
+      )}
     </div>
   )
 }
