@@ -477,6 +477,80 @@ pub fn reset_password_with_recovery(state: State<'_, DbState>, username: String,
     Ok(())
 }
 
+/// 修改密码（支持原密码或恢复码验证）
+/// verification_method: "password" 或 "recovery"
+#[tauri::command]
+pub fn change_password(
+    state: State<'_, DbState>,
+    username: String,
+    verification_method: String,
+    verification_code: String,
+    new_password: String
+) -> Result<(), String> {
+    let master_key = if verification_method == "recovery" {
+        // 使用恢复码验证
+        crypto::unlock_with_recovery_code(&username, &verification_code)?
+    } else {
+        // 使用原密码验证
+        crypto::verify_and_get_master_key(&username, &verification_code)?
+    };
+
+    // 使用 Master Key 重置密码
+    crypto::reset_password_with_master_key(&username, master_key, &new_password)?;
+
+    // 初始化用户数据库
+    state.init_for_user(&username)?;
+
+    Ok(())
+}
+
+// ============ 密保问题相关命令 ============
+
+/// 检查用户是否设置了密保问题
+#[tauri::command]
+pub fn has_security_questions(username: String) -> Result<bool, String> {
+    Ok(crypto::has_security_questions(&username))
+}
+
+/// 设置密保问题（登录后调用）
+#[tauri::command]
+pub fn set_security_questions(
+    username: String,
+    questions: Vec<String>,
+    answers: Vec<String>,
+) -> Result<(), String> {
+    crypto::set_security_questions(&username, questions, answers)
+}
+
+/// 获取密保问题列表（忘记密码时调用）
+#[tauri::command]
+pub fn get_security_questions(username: String) -> Result<Vec<String>, String> {
+    crypto::get_security_questions(&username)
+}
+
+/// 验证密保答案并重置密码
+#[tauri::command]
+pub fn reset_password_with_security_questions(
+    state: State<'_, DbState>,
+    username: String,
+    answers: Vec<String>,
+    new_password: String,
+) -> Result<(), String> {
+    let master_key = crypto::verify_security_questions(&username, answers)?;
+    crypto::reset_password_with_security_questions(&username, master_key, &new_password)?;
+
+    // 初始化用户数据库
+    state.init_for_user(&username)?;
+
+    Ok(())
+}
+
+/// 删除密保问题
+#[tauri::command]
+pub fn delete_security_questions(username: String) -> Result<(), String> {
+    crypto::delete_security_questions(&username)
+}
+
 // ============ 用户数据导出/导入 ============
 
 /// 导出用户数据为ZIP压缩包

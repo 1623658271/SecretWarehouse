@@ -4,7 +4,7 @@ import { useTheme } from './ThemeProvider'
 import {
   X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Check, Star, Eye, Key,
   Database, Download, Upload, Palette, AlignLeft, Grid3X3, Archive, ShieldCheck, Plus, PanelBottom,
-  Crosshair, Move, CheckCircle
+  Crosshair, Move, CheckCircle, HelpCircle, Trash2, Save
 } from 'lucide-react'
 import { appWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/tauri'
@@ -305,6 +305,15 @@ export default function Settings({ username }: SettingsProps) {
   const [screenSize, setScreenSize] = useState({ width: 1920, height: 1080 })
   const [showPositionPicker, setShowPositionPicker] = useState(false)
 
+  // Security questions state
+  const [hasSecurityQuestions, setHasSecurityQuestions] = useState(false)
+  const [showSQForm, setShowSQForm] = useState(false)
+  const [sqQuestions, setSQQuestions] = useState<string[]>(['', ''])
+  const [sqAnswers, setSQAnswers] = useState<string[]>(['', ''])
+  const [sqLoading, setSQLoading] = useState(false)
+  const [sqMessage, setSQMessage] = useState('')
+  const [sqStatus, setSQStatus] = useState<'idle' | 'success' | 'error'>('idle')
+
   // Show saved notification
   const handleUpdateSettings = (partial: Partial<typeof settings>) => {
     updateSettings(partial)
@@ -319,6 +328,116 @@ export default function Settings({ username }: SettingsProps) {
       setScreenSize({ width, height })
     } catch (err) {
       console.error('Failed to get screen size:', err)
+    }
+  }
+
+  // Check security questions status
+  const checkSecurityQuestions = async () => {
+    try {
+      const has = await invoke<boolean>('has_security_questions', { username })
+      setHasSecurityQuestions(has)
+    } catch (err) {
+      console.error('Failed to check security questions:', err)
+    }
+  }
+
+  // Load security questions status on mount
+  useEffect(() => {
+    if (showSettings) {
+      checkSecurityQuestions()
+    }
+  }, [showSettings])
+
+  // Add security question row
+  const addSQRow = () => {
+    if (sqQuestions.length < 5) {
+      setSQQuestions([...sqQuestions, ''])
+      setSQAnswers([...sqAnswers, ''])
+    }
+  }
+
+  // Remove security question row
+  const removeSQRow = (index: number) => {
+    if (sqQuestions.length > 2) {
+      setSQQuestions(sqQuestions.filter((_, i) => i !== index))
+      setSQAnswers(sqAnswers.filter((_, i) => i !== index))
+    }
+  }
+
+  // Update security question
+  const updateSQQuestion = (index: number, value: string) => {
+    const newQuestions = [...sqQuestions]
+    newQuestions[index] = value
+    setSQQuestions(newQuestions)
+  }
+
+  // Update security answer
+  const updateSQAnswer = (index: number, value: string) => {
+    const newAnswers = [...sqAnswers]
+    newAnswers[index] = value
+    setSQAnswers(newAnswers)
+  }
+
+  // Save security questions
+  const handleSaveSecurityQuestions = async () => {
+    // Validate
+    const validQuestions = sqQuestions.filter(q => q.trim())
+    const validAnswers = sqAnswers.filter(a => a.trim())
+
+    if (validQuestions.length < 2) {
+      setSQStatus('error')
+      setSQMessage('至少需要设置2个密保问题')
+      setTimeout(() => { setSQStatus('idle'); setSQMessage('') }, 3000)
+      return
+    }
+
+    if (validQuestions.length !== validAnswers.length) {
+      setSQStatus('error')
+      setSQMessage('每个问题都需要设置答案')
+      setTimeout(() => { setSQStatus('idle'); setSQMessage('') }, 3000)
+      return
+    }
+
+    setSQLoading(true)
+    try {
+      await invoke('set_security_questions', {
+        username,
+        questions: validQuestions,
+        answers: validAnswers
+      })
+      setHasSecurityQuestions(true)
+      setShowSQForm(false)
+      setSQStatus('success')
+      setSQMessage('密保问题设置成功！')
+      setTimeout(() => { setSQStatus('idle'); setSQMessage('') }, 3000)
+    } catch (err) {
+      setSQStatus('error')
+      setSQMessage(`设置失败: ${err}`)
+      setTimeout(() => { setSQStatus('idle'); setSQMessage('') }, 3000)
+    } finally {
+      setSQLoading(false)
+    }
+  }
+
+  // Delete security questions
+  const handleDeleteSecurityQuestions = async () => {
+    if (!confirm('确定要删除密保问题吗？删除后将无法通过密保问题找回密码。')) {
+      return
+    }
+
+    setSQLoading(true)
+    try {
+      await invoke('delete_security_questions', { username })
+      setHasSecurityQuestions(false)
+      setSQStatus('success')
+      setSQMessage('密保问题已删除')
+      setTimeout(() => { setSQStatus('idle'); setSQMessage('') }, 3000)
+    } catch (err) {
+      setSQStatus('error')
+      setSQMessage(`删除失败: ${err}`)
+      setTimeout(() => { setSQStatus('idle'); setSQMessage('') }, 3000)
+    } finally {
+      setSQLoading(false)
     }
   }
 
@@ -829,6 +948,72 @@ export default function Settings({ username }: SettingsProps) {
                 onChange={(value) => handleUpdateSettings({ clipboardClearSeconds: value })}
               />
 
+              {/* Security Questions */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <HelpCircle className="w-4 h-4 text-slate-400" />
+                  <label className="text-sm text-slate-600 dark:text-slate-400">密保问题</label>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                  忘记密码时可通过密保问题找回（可选设置）
+                </p>
+
+                {hasSecurityQuestions ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+                      <Check className="w-4 h-4 text-emerald-500" />
+                      <span className="text-sm text-emerald-600 dark:text-emerald-400">已设置密保问题</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSQQuestions(['', ''])
+                          setSQAnswers(['', ''])
+                          setShowSQForm(true)
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-xl text-sm transition-colors"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>重新设置</span>
+                      </button>
+                      <button
+                        onClick={handleDeleteSecurityQuestions}
+                        disabled={sqLoading}
+                        className="flex items-center justify-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl text-sm transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setSQQuestions(['', ''])
+                      setSQAnswers(['', ''])
+                      setShowSQForm(true)
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>设置密保问题</span>
+                  </button>
+                )}
+
+                {/* SQ Status Message */}
+                {sqMessage && (
+                  <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                    sqStatus === 'success'
+                      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                      : sqStatus === 'error'
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {sqStatus === 'success' && <Check className="w-4 h-4" />}
+                    <span>{sqMessage}</span>
+                  </div>
+                )}
+              </div>
+
               {/* Quick Search Shortcut */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -1158,6 +1343,101 @@ export default function Settings({ username }: SettingsProps) {
           onChange={handlePositionChange}
           onClose={() => setShowPositionPicker(false)}
         />
+      )}
+
+      {/* Security Questions Form Modal */}
+      {showSQForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-700/60 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700/40">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">设置密保问题</h3>
+              <button
+                onClick={() => setShowSQForm(false)}
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                设置密保问题后，忘记密码时可通过回答密保问题找回。至少需要设置 2 个问题，最多 5 个。
+              </p>
+
+              {sqQuestions.map((question, index) => (
+                <div key={index} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">问题 {index + 1}</span>
+                    {sqQuestions.length > 2 && (
+                      <button
+                        onClick={() => removeSQRow(index)}
+                        className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={question}
+                    onChange={(e) => updateSQQuestion(index, e.target.value)}
+                    placeholder="例如：您的小学名称是？"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                  <input
+                    type="text"
+                    value={sqAnswers[index]}
+                    onChange={(e) => updateSQAnswer(index, e.target.value)}
+                    placeholder="答案"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+              ))}
+
+              {sqQuestions.length < 5 && (
+                <button
+                  onClick={addSQRow}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-violet-400 dark:hover:border-violet-500 text-slate-500 dark:text-slate-400 hover:text-violet-500 dark:hover:text-violet-400 rounded-xl text-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>添加更多问题</span>
+                </button>
+              )}
+
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  <strong>安全提示：</strong>建议设置"非标准答案"（如：小学名称填"ABCDEFG"），避免被他人猜到。
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-700/40">
+              <button
+                onClick={() => setShowSQForm(false)}
+                className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveSecurityQuestions}
+                disabled={sqLoading}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {sqLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>保存</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
