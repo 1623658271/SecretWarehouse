@@ -117,6 +117,51 @@ jobs:
             echo "Warning: icon.iconset directory not found"
           fi
 
+      - name: Generate icns for non-macOS
+        if: runner.os != 'macOS'
+        shell: bash
+        run: |
+          pip install Pillow
+          python3 -c "
+          from PIL import Image
+          import struct, io, os
+
+          def create_icns(png_files, output_path):
+              icon_family = b'icns'
+              entries = b''
+              for png_file, size in png_files:
+                  if not os.path.exists(png_file):
+                      continue
+                  img = Image.open(png_file).convert('RGBA')
+                  img = img.resize((size, size), Image.Resampling.LANCZOS)
+                  buf = io.BytesIO()
+                  img.save(buf, format='PNG')
+                  data = buf.getvalue()
+                  if size <= 16: icon_type = b'icp4'
+                  elif size <= 32: icon_type = b'icp5'
+                  elif size <= 64: icon_type = b'icp6'
+                  elif size <= 128: icon_type = b'ic07'
+                  elif size <= 256: icon_type = b'ic08'
+                  elif size <= 512: icon_type = b'ic09'
+                  else: icon_type = b'ic10'
+                  entry_len = len(data) + 8
+                  entries += icon_type + struct.pack('>I', entry_len) + data
+              family_len = len(entries) + 8
+              icns_data = icon_family + struct.pack('>I', family_len) + entries
+              with open(output_path, 'wb') as f:
+                  f.write(icns_data)
+
+          files = [
+              ('src-tauri/icons/icon.iconset/icon_16x16.png', 16),
+              ('src-tauri/icons/icon.iconset/icon_32x32.png', 32),
+              ('src-tauri/icons/icon.iconset/icon_128x128.png', 128),
+              ('src-tauri/icons/icon.iconset/icon_256x256.png', 256),
+              ('src-tauri/icons/icon.iconset/icon_512x512.png', 512),
+          ]
+          create_icns(files, 'src-tauri/icons/icon.icns')
+          print('Generated icon.icns')
+          "
+
       # ==================== Build ====================
       - name: TypeScript type check
         run: npx tsc --noEmit
