@@ -14,6 +14,15 @@ use tauri::{
     SystemTrayMenuItem, WindowBuilder, WindowUrl,
 };
 
+/// 显示主窗口
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 use crypto::is_session_active;
 
 fn create_quick_search_window(app: &tauri::AppHandle) -> tauri::Result<tauri::Window> {
@@ -75,6 +84,10 @@ fn main() {
         .with_tooltip("SecretWarehouse - 安全密码管理器");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // 第二个实例启动时，显示主窗口
+            show_main_window(app);
+        }))
         .manage(db_state)
         .system_tray(system_tray)
         .on_system_tray_event(|app, event| {
