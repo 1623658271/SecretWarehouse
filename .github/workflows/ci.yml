@@ -17,12 +17,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - platform: linux
+            os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          - os: macos-14
-            target: aarch64-apple-darwin
-          - os: windows-2025-vs2026
+          - platform: windows
+            os: windows-2025-vs2026
             target: x86_64-pc-windows-msvc
+          - platform: macos
+            os: macos-14
+            target: aarch64-apple-darwin
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -33,8 +36,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
 
-      - name: Install Rust stable
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -43,19 +47,10 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: ci-${{ matrix.platform }}
 
-      - name: Node.js cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install dependencies (Ubuntu)
-        if: runner.os == 'Linux'
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -77,5 +72,5 @@ jobs:
         run: cargo check --manifest-path src-tauri/Cargo.toml
 
       - name: Clippy
-        if: runner.os == 'Linux'
+        if: matrix.platform == 'linux'
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
