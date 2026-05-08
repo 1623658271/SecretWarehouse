@@ -1,0 +1,18 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for SecretWarehouse",
+  "windows": ["main", "quick-search"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-write-text-file",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "shell:allow-open"
+  ]
+}

@@ -6,9 +6,11 @@ import {
   Database, Download, Upload, Palette, AlignLeft, Grid3X3, Archive, ShieldCheck, Plus, PanelBottom,
   Crosshair, Move, CheckCircle, HelpCircle, Trash2, Save, ChevronRight, ChevronDown
 } from 'lucide-react'
-import { appWindow } from '@tauri-apps/api/window'
-import { invoke } from '@tauri-apps/api/tauri'
-import { open, save } from '@tauri-apps/api/dialog'
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
+import { invoke } from '@tauri-apps/api/core'
+import { open, save } from '@tauri-apps/plugin-dialog'
+
+const appWindow = getCurrentWindow()
 
 interface SettingsProps {
   username: string
@@ -503,13 +505,13 @@ export default function Settings({ username }: SettingsProps) {
       } else if (size === 'custom') {
         await appWindow.setFullscreen(false)
         await appWindow.unmaximize()
-        await appWindow.setSize({ type: 'Logical', width, height })
+        await appWindow.setSize(new LogicalSize(width, height))
         await appWindow.center()
       } else if (size.includes('x')) {
         await appWindow.setFullscreen(false)
         await appWindow.unmaximize()
         const [w, h] = size.split('x').map(Number)
-        await appWindow.setSize({ type: 'Logical', width: w, height: h })
+        await appWindow.setSize(new LogicalSize(w, h))
         await appWindow.center()
       }
     } catch (err) {

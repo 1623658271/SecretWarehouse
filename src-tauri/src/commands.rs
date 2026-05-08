@@ -3,7 +3,7 @@ use crate::db::DbState;
 use crate::models::*;
 use indexmap::IndexMap;
 use rand::Rng;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 /// Imported secret row type: (id, icon, title, description, encrypted_fields, tags, created_at, updated_at, favorite)
 type ImportedSecretRow = (String, String, String, String, String, String, i64, i64, i64);
@@ -775,7 +775,7 @@ pub fn copy_field_to_clipboard(
             if let Ok(mut clipboard) = Clipboard::new() {
                 let _ = clipboard.set_text("");
                 // 发送事件通知前端
-                let _ = app_handle_clone.emit_all("clipboard-cleared", ());
+                let _ = app_handle_clone.emit("clipboard-cleared", ());
             }
         });
     }
@@ -786,7 +786,7 @@ pub fn copy_field_to_clipboard(
 /// 隐藏快速搜索窗口
 #[tauri::command]
 pub fn hide_quick_search_window(app_handle: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app_handle.get_window("quick-search") {
+    if let Some(window) = app_handle.get_webview_window("quick-search") {
         window.hide().map_err(|e| format!("隐藏窗口失败: {}", e))?;
     }
     Ok(())
@@ -801,7 +801,7 @@ pub fn check_active_session() -> bool {
 /// 设置快速搜索窗口位置
 #[tauri::command]
 pub fn set_quick_search_position(app_handle: tauri::AppHandle, x: f64, y: f64) -> Result<(), String> {
-    if let Some(window) = app_handle.get_window("quick-search") {
+    if let Some(window) = app_handle.get_webview_window("quick-search") {
         // 使用 LogicalPosition 以匹配 get_screen_size 返回的逻辑尺寸
         let position = tauri::LogicalPosition::new(x, y);
         window.set_position(position).map_err(|e| format!("设置窗口位置失败: {}", e))?;
@@ -812,7 +812,7 @@ pub fn set_quick_search_position(app_handle: tauri::AppHandle, x: f64, y: f64) -
 /// 获取屏幕尺寸
 #[tauri::command]
 pub fn get_screen_size(app_handle: tauri::AppHandle) -> Result<(f64, f64), String> {
-    if let Some(window) = app_handle.get_window("main") {
+    if let Some(window) = app_handle.get_webview_window("main") {
         if let Ok(Some(monitor)) = window.current_monitor() {
             let size = monitor.size();
             let scale = monitor.scale_factor();

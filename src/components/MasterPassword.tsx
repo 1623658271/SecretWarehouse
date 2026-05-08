@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { invoke } from '@tauri-apps/api/tauri'
-import { save } from '@tauri-apps/api/dialog'
-import { writeTextFile } from '@tauri-apps/api/fs'
+import { invoke } from '@tauri-apps/api/core'
+import { save } from '@tauri-apps/plugin-dialog'
+import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { Lock, Key, Eye, EyeOff, Check, AlertCircle, Download, RefreshCw, Copy, User, ShieldCheck, HelpCircle } from 'lucide-react'
 
 interface MasterPasswordProps {

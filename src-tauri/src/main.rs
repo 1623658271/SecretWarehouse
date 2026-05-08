@@ -9,14 +9,13 @@ mod db;
 mod models;
 
 use db::DbState;
-use tauri::{
-    CustomMenuItem, GlobalShortcutManager, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu,
-    SystemTrayMenuItem, WindowBuilder, WindowUrl,
-};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// 显示主窗口
 fn show_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_window("main") {
+    if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
@@ -25,15 +24,15 @@ fn show_main_window(app: &tauri::AppHandle) {
 
 use crypto::is_session_active;
 
-fn create_quick_search_window(app: &tauri::AppHandle) -> tauri::Result<tauri::Window> {
+fn create_quick_search_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
     let url = if cfg!(debug_assertions) {
-        WindowUrl::External("http://localhost:1420#quick-search".parse().unwrap())
+        WebviewUrl::External("http://localhost:1420#quick-search".parse().unwrap())
     } else {
-        WindowUrl::App("index.html#quick-search".into())
+        WebviewUrl::App("index.html#quick-search".into())
     };
 
     // 默认位置（屏幕左上角附近），实际位置由前端根据用户设置动态调整
-    WindowBuilder::new(app, "quick-search", url)
+    WebviewWindowBuilder::new(app, "quick-search", url)
         .title("快速搜索")
         .inner_size(480.0, 400.0)
         .resizable(true)
@@ -49,14 +48,14 @@ fn show_quick_search_window(app: &tauri::AppHandle) {
     // 检查是否有活动会话
     if !is_session_active() {
         // 未登录，显示主窗口让用户登录
-        if let Some(window) = app.get_window("main") {
+        if let Some(window) = app.get_webview_window("main") {
             let _ = window.show();
             let _ = window.set_focus();
         }
         return;
     }
 
-    if let Some(window) = app.get_window("quick-search") {
+    if let Some(window) = app.get_webview_window("quick-search") {
         let _ = window.show();
         let _ = window.set_focus();
         let _ = window.emit("focus-input", ());
@@ -71,68 +70,76 @@ fn show_quick_search_window(app: &tauri::AppHandle) {
 fn main() {
     let db_state = DbState::new().expect("数据库初始化失败");
 
-    // 系统托盘菜单
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(CustomMenuItem::new("show", "显示窗口"))
-        .add_item(CustomMenuItem::new("quick_search", "快速搜索 (Ctrl+Shift+P)"))
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(CustomMenuItem::new("quit", "退出"));
-
-    let system_tray = SystemTray::new()
-        .with_menu(tray_menu)
-        .with_tooltip("SecretWarehouse - 安全密码管理器");
-
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // 第二个实例启动时，显示主窗口
             show_main_window(app);
         }))
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_shell::init())
         .manage(db_state)
-        .system_tray(system_tray)
-        .on_system_tray_event(|app, event| {
-            match event {
-                SystemTrayEvent::MenuItemClick { id, .. } => {
-                    match id.as_str() {
-                        "show" => {
-                            if let Some(window) = app.get_window("main") {
-                                window.show().unwrap();
-                                window.set_focus().unwrap();
+        .setup(|app| {
+            // 创建系统托盘菜单
+            let show_item = MenuItemBuilder::with_id("show", "显示窗口").build(app)?;
+            let quick_search_item =
+                MenuItemBuilder::with_id("quick_search", "快速搜索 (Ctrl+Shift+P)").build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&show_item)
+                .item(&quick_search_item)
+                .separator()
+                .item(&PredefinedMenuItem::close_window(app, Some("关闭窗口"))?)
+                .item(&quit_item)
+                .build()?;
+
+            // 创建系统托盘
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .tooltip("SecretWarehouse - 安全密码管理器")
+                .icon(app.default_window_icon().unwrap().clone())
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quick_search" => {
+                        show_quick_search_window(app);
+                    }
+                    "quit" => {
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    match event {
+                        tauri::tray::TrayIconEvent::Click {
+                            button: tauri::tray::MouseButton::Left,
+                            button_state: tauri::tray::MouseButtonState::Up,
+                            ..
+                        } => {
+                            // 左键点击显示主窗口
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
                             }
-                        }
-                        "quick_search" => {
-                            // 只显示快速搜索窗口，不显示主窗口
-                            show_quick_search_window(app);
-                        }
-                        "quit" => {
-                            std::process::exit(0);
                         }
                         _ => {}
                     }
-                }
-                SystemTrayEvent::LeftClick { .. } => {
-                    // 点击托盘图标显示窗口
-                    if let Some(window) = app.get_window("main") {
-                        window.show().unwrap();
-                        window.set_focus().unwrap();
-                    }
-                }
-                _ => {}
-            }
-        })
-        .setup(|app| {
+                })
+                .build(app)?;
+
             // 创建快速搜索窗口（初始隐藏）
             create_quick_search_window(&app.handle())?;
 
-            // 注册全局快捷键 Ctrl+Shift+P
-            let app_handle = app.handle();
-            app.global_shortcut_manager()
-                .register("CommandOrControl+Shift+P", move || {
-                    // 只显示快速搜索窗口，不显示主窗口
-                    show_quick_search_window(&app_handle);
-                })?;
-
             // 窗口关闭时隐藏到托盘而不是退出
-            if let Some(window) = app.get_window("main") {
+            if let Some(window) = app.get_webview_window("main") {
                 let window_clone = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {

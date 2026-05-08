@@ -1,71 +1,43 @@
 {
+  "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-settings/main/src/schema.json",
+  "productName": "SecretWarehouse",
+  "version": "0.1.0",
+  "identifier": "com.secretwarehouse.app",
   "build": {
+    "frontendDist": "../dist/env",
+    "devUrl": "http://localhost:1420",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
-    "devPath": "http://localhost:1420",
-    "distDir": "../dist/env"
+    "beforeBuildCommand": "npm run build"
   },
-  "package": {
-    "productName": "SecretWarehouse",
-    "version": "0.1.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "clipboard": {
-        "all": true
-      },
-      "dialog": {
-        "open": true,
-        "save": true
-      },
-      "fs": {
-        "writeFile": true,
-        "scope": ["**"]
-      },
-      "shell": {
-        "all": false,
-        "open": true
-      },
-      "globalShortcut": {
-        "all": true
-      },
-      "window": {
-        "startDragging": true
-      }
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.secretwarehouse.app",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/SecretWarehouse.ico",
-        "icons/SecretWarehouse.png",
-        "icons/icon.icns"
-      ]
-    },
-    "security": {
-      "csp": null
-    },
-    "systemTray": {
-      "iconPath": "icons/SecretWarehouse.png",
-      "iconAsTemplate": true
-    },
+  "app": {
     "windows": [
       {
-        "fullscreen": false,
-        "maximized": true,
-        "resizable": true,
+        "label": "main",
         "title": "SecretWarehouse - 安全密码管理器",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
+        "maximized": true,
+        "resizable": true,
         "decorations": true,
-        "fileDropEnabled": false
+        "dragDropEnabled": false
       }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/SecretWarehouse.ico",
+      "icons/SecretWarehouse.png",
+      "icons/icon.icns"
     ]
   }
 }
