@@ -12,7 +12,7 @@ env:
 
 jobs:
   check:
-    name: Check ${{ matrix.label }}
+    name: Check (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -32,7 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -61,17 +61,6 @@ jobs:
             libjavascriptcoregtk-4.1-dev \
             libsoup-3.0-dev \
             libayatana-appindicator3-dev
-
-      - name: Validate macOS iconset
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          if [ -d "src-tauri/icons/icon.iconset" ]; then
-            echo "iconset directory exists"
-            ls -la src-tauri/icons/icon.iconset/
-          else
-            echo "WARNING: icon.iconset directory not found"
-          fi
 
       - name: Install frontend dependencies
         run: npm ci

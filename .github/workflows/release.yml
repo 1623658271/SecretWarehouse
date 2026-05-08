@@ -34,7 +34,7 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.label }}
+    name: Build (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -43,21 +43,18 @@ jobs:
           - runner: ubuntu-latest
             label: linux-x64
             target: x86_64-unknown-linux-gnu
-            asset_suffix: linux-x64
           - runner: windows-latest
             label: windows-x64
             target: x86_64-pc-windows-msvc
-            asset_suffix: windows-x64
           - runner: macos-14
             label: macos-arm64
             target: aarch64-apple-darwin
-            asset_suffix: macos-arm64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -72,7 +69,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          shared-key: ${{ matrix.label }}
+          shared-key: release-${{ matrix.label }}
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -92,9 +89,7 @@ jobs:
         shell: pwsh
         run: |
           choco install nsis -y
-          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          Write-Host "NSIS installed, makensis path:"
-          Get-Command makensis -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          Write-Host "NSIS installed"
 
       - name: Generate macOS icon
         if: runner.os == 'macOS'
@@ -103,8 +98,6 @@ jobs:
           if [ -d "src-tauri/icons/icon.iconset" ]; then
             iconutil -c icns -o "src-tauri/icons/icon.icns" "src-tauri/icons/icon.iconset"
             echo "Generated icon.icns"
-          else
-            echo "icon.iconset not found, skipping icns generation"
           fi
 
       - name: Install frontend dependencies
@@ -112,8 +105,7 @@ jobs:
 
       - name: Build Tauri application
         shell: bash
-        run: cargo tauri build --target ${{ matrix.target }}
-        working-directory: src-tauri
+        run: npm run tauri build -- --target ${{ matrix.target }}
 
       - name: Package build (Linux)
         if: runner.os == 'Linux'
@@ -122,7 +114,7 @@ jobs:
           TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-          BASE_NAME="${APP_NAME}-${TAG_NAME}-${{ matrix.asset_suffix }}"
+          BASE_NAME="${APP_NAME}-${TAG_NAME}-${{ matrix.label }}"
           mkdir -p release
 
           # AppImage
@@ -130,24 +122,17 @@ jobs:
           if [ -n "$APPIMAGE" ]; then
             cp "$APPIMAGE" "release/${BASE_NAME}.AppImage"
             chmod +x "release/${BASE_NAME}.AppImage"
+            echo "Created AppImage"
           fi
 
           # deb package
           DEB=$(find src-tauri/target -name "*.deb" -type f 2>/dev/null | head -1)
           if [ -n "$DEB" ]; then
             cp "$DEB" "release/${BASE_NAME}.deb"
+            echo "Created deb"
           fi
 
-          # tar.gz portable
-          if [ -n "$APPIMAGE" ]; then
-            mkdir -p tmp_pkg
-            cp "$APPIMAGE" "tmp_pkg/${APP_NAME}"
-            chmod +x "tmp_pkg/${APP_NAME}"
-            tar -czf "release/${BASE_NAME}.tar.gz" -C tmp_pkg .
-            rm -rf tmp_pkg
-          fi
-
-          ls -lh release/
+          ls -lh release/ || echo "No files in release"
 
       - name: Package build (macOS)
         if: runner.os == 'macOS'
@@ -156,26 +141,26 @@ jobs:
           TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-          BASE_NAME="${APP_NAME}-${TAG_NAME}-${{ matrix.asset_suffix }}"
+          BASE_NAME="${APP_NAME}-${TAG_NAME}-${{ matrix.label }}"
           mkdir -p release
 
           # DMG installer
           DMG=$(find src-tauri/target -name "*.dmg" -type f 2>/dev/null | head -1)
           if [ -n "$DMG" ]; then
             cp "$DMG" "release/${BASE_NAME}.dmg"
-            echo "Created DMG: ${BASE_NAME}.dmg"
+            echo "Created DMG"
           fi
 
-          # Portable zip with .app bundle
+          # .app bundle as zip
           APP_BUNDLE=$(find src-tauri/target -name "*.app" -type d 2>/dev/null | head -1)
           if [ -n "$APP_BUNDLE" ]; then
             cd "$(dirname "$APP_BUNDLE")"
-            /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(basename "$APP_BUNDLE")" "${OLDPWD}/release/${BASE_NAME}-portable.zip"
+            /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(basename "$APP_BUNDLE")" "${OLDPWD}/release/${BASE_NAME}.zip"
             cd "$OLDPWD"
-            echo "Created portable: ${BASE_NAME}-portable.zip"
+            echo "Created zip"
           fi
 
-          ls -lh release/
+          ls -lh release/ || echo "No files in release"
 
       - name: Package build (Windows)
         if: runner.os == 'Windows'
@@ -183,31 +168,21 @@ jobs:
         env:
           TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
-          $BASE_NAME = "${env:APP_NAME}-${env:TAG_NAME}-${{ matrix.asset_suffix }}"
+          $BASE_NAME = "${env:APP_NAME}-${env:TAG_NAME}-${{ matrix.label }}"
           New-Item -ItemType Directory -Force -Path release
 
-          # NSIS installer - search in bundle directory
-          $NSIS_EXE = Get-ChildItem -Path "src-tauri/target/${{ matrix.target }}/release/bundle/nsis" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $NSIS_EXE) {
-            $NSIS_EXE = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
+          # NSIS installer
+          $NSIS_EXE = Get-ChildItem -Path "src-tauri/target" -Filter "*.exe" -Recurse | Where-Object { $_.FullName -match "nsis" } | Select-Object -First 1
           if ($NSIS_EXE) {
-            Copy-Item $NSIS_EXE.FullName "release/${BASE_NAME}-installer.exe"
-            Write-Host "Created installer: ${BASE_NAME}-installer.exe"
-          } else {
-            Write-Host "NSIS installer not found"
+            Copy-Item $NSIS_EXE.FullName "release/${BASE_NAME}-setup.exe"
+            Write-Host "Created NSIS installer"
           }
 
-          # Portable zip - find executable
-          $APP_EXE = Get-ChildItem -Path "src-tauri/target/${{ matrix.target }}/release" -Filter "secret-warehouse.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $APP_EXE) {
-            $APP_EXE = Get-ChildItem -Path "src-tauri/target/release" -Filter "secret-warehouse.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-          if ($APP_EXE) {
-            Compress-Archive -Path $APP_EXE.FullName -DestinationPath "release/${BASE_NAME}-portable.zip" -Force
-            Write-Host "Created portable: ${BASE_NAME}-portable.zip"
-          } else {
-            Write-Host "Executable not found"
+          # MSI installer
+          $MSI = Get-ChildItem -Path "src-tauri/target" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if ($MSI) {
+            Copy-Item $MSI.FullName "release/${BASE_NAME}.msi"
+            Write-Host "Created MSI"
           }
 
           Get-ChildItem -Path release -File
@@ -217,12 +192,13 @@ jobs:
         with:
           name: ${{ matrix.label }}
           path: release/*
-          if-no-files-found: error
+          if-no-files-found: warn
 
   release:
     name: Publish Release
     runs-on: ubuntu-latest
     needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Download build artifacts
@@ -251,7 +227,7 @@ jobs:
           fi
 
           if [ -z "$release_name" ]; then
-            release_name="${APP_NAME} ${tag_name}"
+            release_name="${{ env.APP_NAME }} ${tag_name}"
           fi
 
           echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
@@ -264,9 +240,7 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag_name }}
           name: ${{ steps.meta.outputs.release_name }}
-          target_commitish: ${{ github.sha }}
           draft: ${{ steps.meta.outputs.draft == 'true' }}
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           generate_release_notes: true
           files: release-assets/*
-          fail_on_unmatched_files: true
