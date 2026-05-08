@@ -4,7 +4,7 @@ import { useTheme } from './ThemeProvider'
 import {
   X, Sun, Moon, Monitor, Type, LayoutGrid, Space, RotateCcw, Maximize2, Check, Star, Eye, Key,
   Database, Download, Upload, Palette, AlignLeft, Grid3X3, Archive, ShieldCheck, Plus, PanelBottom,
-  Crosshair, Move, CheckCircle, HelpCircle, Trash2, Save
+  Crosshair, Move, CheckCircle, HelpCircle, Trash2, Save, ChevronRight, ChevronDown
 } from 'lucide-react'
 import { appWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/tauri'
@@ -279,12 +279,36 @@ function FullScreenPositionPicker({ x, y, screenWidth, screenHeight, onChange, o
   )
 }
 
-// Section divider component
-function SectionTitle({ icon: Icon, title }: { icon: React.ElementType, title: string }) {
+// Collapsible section component
+interface CollapsibleSectionProps {
+  icon: React.ElementType
+  title: string
+  defaultExpanded?: boolean
+  children: React.ReactNode
+}
+
+function CollapsibleSection({ icon: Icon, title, defaultExpanded = false, children }: CollapsibleSectionProps) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+
   return (
-    <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700/40">
-      <Icon className="w-4 h-4 text-violet-500" />
-      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{title}</h3>
+    <div className="border border-slate-200 dark:border-slate-700/40 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+      >
+        {isExpanded ? (
+          <ChevronDown className="w-4 h-4 text-slate-400" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-slate-400" />
+        )}
+        <Icon className="w-4 h-4 text-violet-500" />
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{title}</h3>
+      </button>
+      {isExpanded && (
+        <div className="p-4 space-y-4">
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -715,11 +739,9 @@ export default function Settings({ username }: SettingsProps) {
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Settings Panel */}
-          <div className="w-1/2 overflow-y-auto p-6 space-y-6 border-r border-slate-200 dark:border-slate-700/40">
+          <div className="w-1/2 overflow-y-auto p-6 space-y-3 border-r border-slate-200 dark:border-slate-700/40">
             {/* 外观 Section */}
-            <div className="space-y-4">
-              <SectionTitle icon={Palette} title="外观" />
-
+            <CollapsibleSection icon={Palette} title="外观" defaultExpanded={true}>
               {/* Theme */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -840,12 +862,10 @@ export default function Settings({ username }: SettingsProps) {
                   </div>
                 )}
               </div>
-            </div>
+            </CollapsibleSection>
 
             {/* 字体 Section */}
-            <div className="space-y-4">
-              <SectionTitle icon={Type} title="字体" />
-
+            <CollapsibleSection icon={Type} title="字体">
               <SliderWithInput
                 label="字体大小"
                 value={settings.fontSize}
@@ -855,12 +875,10 @@ export default function Settings({ username }: SettingsProps) {
                 icon={<AlignLeft className="w-4 h-4 text-slate-400" />}
                 onChange={(value) => handleUpdateSettings({ fontSize: value })}
               />
-            </div>
+            </CollapsibleSection>
 
             {/* 布局 Section */}
-            <div className="space-y-4">
-              <SectionTitle icon={Grid3X3} title="布局" />
-
+            <CollapsibleSection icon={Grid3X3} title="布局">
               <SliderWithInput
                 label="卡片大小"
                 value={settings.cardSize}
@@ -880,11 +898,10 @@ export default function Settings({ username }: SettingsProps) {
                 icon={<Space className="w-4 h-4 text-slate-400" />}
                 onChange={(value) => handleUpdateSettings({ spacing: value })}
               />
-            </div>
+            </CollapsibleSection>
 
             {/* 安全 Section */}
-            <div className="space-y-4">
-              <SectionTitle icon={ShieldCheck} title="安全" />
+            <CollapsibleSection icon={ShieldCheck} title="安全">
 
               {/* Password Check Keywords */}
               <div>
@@ -1037,11 +1054,10 @@ export default function Settings({ username }: SettingsProps) {
                   修改后需重启应用生效
                 </p>
               </div>
-            </div>
+            </CollapsibleSection>
 
             {/* 托盘 Section */}
-            <div className="space-y-4">
-              <SectionTitle icon={PanelBottom} title="系统托盘" />
+            <CollapsibleSection icon={PanelBottom} title="系统托盘">
 
               {/* Close to Tray */}
               <div className="flex items-center justify-between">
@@ -1078,11 +1094,10 @@ export default function Settings({ username }: SettingsProps) {
                   }`} />
                 </button>
               </div>
-            </div>
+            </CollapsibleSection>
 
             {/* 浮窗位置 Section */}
-            <div className="space-y-4">
-              <SectionTitle icon={Crosshair} title="快速搜索浮窗" />
+            <CollapsibleSection icon={Crosshair} title="快速搜索浮窗">
 
               {/* Position Mode */}
               <div>
@@ -1139,11 +1154,10 @@ export default function Settings({ username }: SettingsProps) {
                   </p>
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
 
             {/* 数据 Section */}
-            <div className="space-y-4">
-              <SectionTitle icon={Database} title="数据" />
+            <CollapsibleSection icon={Database} title="数据">
 
               {/* Export User Data (ZIP) */}
               <div>
@@ -1242,7 +1256,7 @@ export default function Settings({ username }: SettingsProps) {
                   <span>{dataMessage}</span>
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
           </div>
 
           {/* Preview Panel */}
