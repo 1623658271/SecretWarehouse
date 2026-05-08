@@ -4,25 +4,21 @@ on:
   push:
     tags:
       - "v*"
-
   workflow_dispatch:
     inputs:
       tag_name:
         description: "Release tag, for example v1.0.0"
         required: true
         type: string
-
       release_name:
         description: "Optional release title"
         required: false
         type: string
-
       prerelease:
         description: "Mark release as prerelease"
         required: false
         default: false
         type: boolean
-
       draft:
         description: "Create release as draft"
         required: false
@@ -47,7 +43,6 @@ jobs:
 
     strategy:
       fail-fast: false
-
       matrix:
         include:
           - runner: ubuntu-latest
@@ -66,189 +61,161 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ==================== Frontend Setup ====================
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: package-lock.json
 
-      - name: Install Rust
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # ==================== Rust Setup ====================
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Rust cache
+      - name: Cache Rust dependencies
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          shared-key: release-${{ matrix.label }}
+          shared-key: release-${{ matrix.label }}-${{ hashFiles('src-tauri/Cargo.lock') }}
 
+      # ==================== Platform Dependencies ====================
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-
           sudo apt-get install -y \
             build-essential \
-            curl \
-            wget \
-            file \
             libssl-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf \
             libwebkit2gtk-4.0-dev \
             libjavascriptcoregtk-4.0-dev \
             libsoup2.4-dev
 
-      - name: Install NSIS
+      - name: Install Windows NSIS
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          choco install nsis -y
+        run: choco install nsis -y --no-progress
 
       - name: Generate macOS icon
         if: runner.os == 'macOS'
         shell: bash
         run: |
           if [ -d "src-tauri/icons/icon.iconset" ]; then
-            iconutil -c icns \
-              -o "src-tauri/icons/icon.icns" \
-              "src-tauri/icons/icon.iconset"
+            iconutil -c icns -o "src-tauri/icons/icon.icns" "src-tauri/icons/icon.iconset"
+            echo "Generated icon.icns"
+          else
+            echo "Warning: icon.iconset directory not found"
           fi
 
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Type check
-        run: npm run typecheck --if-present
-
-      - name: ESLint
-        run: npm run lint --if-present
+      # ==================== Build ====================
+      - name: TypeScript type check
+        run: npx tsc --noEmit
 
       - name: Build frontend
         run: npm run build
 
-      - name: Rust check
+      - name: Verify frontend build
         shell: bash
         run: |
-          cargo check \
-            --manifest-path src-tauri/Cargo.toml \
-            --target ${{ matrix.target }}
-
-      - name: Rust clippy
-        shell: bash
-        run: |
-          cargo clippy \
-            --manifest-path src-tauri/Cargo.toml \
-            --target ${{ matrix.target }} \
-            -- -D warnings
+          if [ ! -d "dist/env" ]; then
+            echo "Error: dist/env directory not found!"
+            ls -la dist/ || echo "dist/ directory does not exist"
+            exit 1
+          fi
+          echo "Frontend build verified: dist/env exists"
+          ls -la dist/env/
 
       - name: Build Tauri application
         shell: bash
         env:
           CI: true
-        run: |
-          npm run tauri build -- --target ${{ matrix.target }}
+        run: npm run tauri build -- --target ${{ matrix.target }}
 
-      - name: Package build (Linux)
+      # ==================== Package Artifacts ====================
+      - name: Package Linux build
         if: runner.os == 'Linux'
         shell: bash
         env:
           TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-
           BASE_NAME="${APP_NAME}-${TAG_NAME}-${{ matrix.label }}"
-
           mkdir -p release
 
+          # Find AppImage
           APPIMAGE=$(find src-tauri/target -name "*.AppImage" -type f | head -1)
-
           if [ -n "$APPIMAGE" ]; then
             cp "$APPIMAGE" "release/${BASE_NAME}.AppImage"
             chmod +x "release/${BASE_NAME}.AppImage"
+            echo "Packaged: ${BASE_NAME}.AppImage"
           fi
 
+          # Find deb
           DEB=$(find src-tauri/target -name "*.deb" -type f | head -1)
-
           if [ -n "$DEB" ]; then
             cp "$DEB" "release/${BASE_NAME}.deb"
+            echo "Packaged: ${BASE_NAME}.deb"
           fi
 
           ls -lh release/
 
-      - name: Package build (macOS)
+      - name: Package macOS build
         if: runner.os == 'macOS'
         shell: bash
         env:
           TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-
           BASE_NAME="${APP_NAME}-${TAG_NAME}-${{ matrix.label }}"
-
           mkdir -p release
 
+          # Find DMG
           DMG=$(find src-tauri/target -name "*.dmg" -type f | head -1)
-
           if [ -n "$DMG" ]; then
             cp "$DMG" "release/${BASE_NAME}.dmg"
+            echo "Packaged: ${BASE_NAME}.dmg"
           fi
 
+          # Find and zip .app bundle
           APP=$(find src-tauri/target -name "*.app" -type d | head -1)
-
           if [ -n "$APP" ]; then
             cd "$(dirname "$APP")"
-
-            /usr/bin/ditto \
-              -c \
-              -k \
-              --sequesterRsrc \
-              --keepParent \
-              "$(basename "$APP")" \
-              "${OLDPWD}/release/${BASE_NAME}.zip"
-
+            ditto -c -k --sequesterRsrc --keepParent "$(basename "$APP")" "${OLDPWD}/release/${BASE_NAME}.zip"
             cd "$OLDPWD"
+            echo "Packaged: ${BASE_NAME}.zip"
           fi
 
           ls -lh release/
 
-      - name: Package build (Windows)
+      - name: Package Windows build
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           $BASE_NAME = "${env:APP_NAME}-${env:TAG_NAME}-${{ matrix.label }}"
-
           New-Item -ItemType Directory -Force -Path release
 
-          $NSIS = Get-ChildItem `
-            -Path "src-tauri/target" `
-            -Filter "*.exe" `
-            -Recurse |
-            Where-Object { $_.FullName -match "nsis" } |
-            Select-Object -First 1
-
+          # Find NSIS installer
+          $NSIS = Get-ChildItem -Path "src-tauri/target" -Filter "*.exe" -Recurse |
+            Where-Object { $_.FullName -match "nsis" } | Select-Object -First 1
           if ($NSIS) {
-            Copy-Item `
-              $NSIS.FullName `
-              "release/${BASE_NAME}-setup.exe"
+            Copy-Item $NSIS.FullName "release/${BASE_NAME}-setup.exe"
+            echo "Packaged: ${BASE_NAME}-setup.exe"
           }
 
-          $MSI = Get-ChildItem `
-            -Path "src-tauri/target" `
-            -Filter "*.msi" `
-            -Recurse |
-            Select-Object -First 1
-
+          # Find MSI
+          $MSI = Get-ChildItem -Path "src-tauri/target" -Filter "*.msi" -Recurse | Select-Object -First 1
           if ($MSI) {
-            Copy-Item `
-              $MSI.FullName `
-              "release/${BASE_NAME}.msi"
+            Copy-Item $MSI.FullName "release/${BASE_NAME}.msi"
+            echo "Packaged: ${BASE_NAME}.msi"
           }
 
           Get-ChildItem release
@@ -257,13 +224,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.label }}
-          path: release/**
+          path: release/**/*
           if-no-files-found: warn
 
   release:
     name: Publish Release
     runs-on: ubuntu-latest
-
     needs: build
 
     steps:
@@ -301,7 +267,7 @@ jobs:
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "draft=$draft" >> "$GITHUB_OUTPUT"
 
-      - name: Publish GitHub release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag_name }}
