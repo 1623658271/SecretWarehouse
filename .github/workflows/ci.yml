@@ -7,38 +7,38 @@ on:
     branches: [main]
 
 env:
-  CARGO_INCREMENTAL: 0
-  RUST_BACKTRACE: short
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  APP_NAME: SecretWarehouse
+  NODE_VERSION: "22"
 
 jobs:
   check:
+    name: Check ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: linux
-            os: ubuntu-latest
+          - runner: ubuntu-latest
+            label: linux-x64
             target: x86_64-unknown-linux-gnu
-          - platform: windows
-            os: windows-2025-vs2026
+          - runner: windows-2025-vs2026
+            label: windows-x64
             target: x86_64-pc-windows-msvc
-          - platform: macos
-            os: macos-14
+          - runner: macos-14
+            label: macos-arm64
             target: aarch64-apple-darwin
 
-    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      - name: Install Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -47,10 +47,10 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          shared-key: ci-${{ matrix.platform }}
+          shared-key: ci-${{ matrix.label }}
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'linux'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -72,5 +72,5 @@ jobs:
         run: cargo check --manifest-path src-tauri/Cargo.toml
 
       - name: Clippy
-        if: matrix.platform == 'linux'
+        if: runner.os == 'Linux'
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings

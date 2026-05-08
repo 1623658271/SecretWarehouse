@@ -1,66 +1,69 @@
-name: Release
+name: Build And Release
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag name (e.g., v0.1.0)'
+        description: "Release tag, for example v1.0.0"
         required: true
         type: string
       release_name:
-        description: 'Release name'
+        description: "Optional release title"
         required: false
         type: string
       prerelease:
-        description: 'Mark as pre-release'
+        description: "Mark release as prerelease"
         required: false
-        type: boolean
         default: false
+        type: boolean
       draft:
-        description: 'Create as draft'
+        description: "Create release as draft"
         required: false
-        type: boolean
         default: false
+        type: boolean
+
+permissions:
+  contents: write
 
 env:
-  CARGO_INCREMENTAL: 0
-  RUST_BACKTRACE: short
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  APP_NAME: SecretWarehouse
+  NODE_VERSION: "22"
 
 jobs:
   build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: linux
-            os: ubuntu-latest
+          - runner: ubuntu-latest
+            label: linux-x64
             target: x86_64-unknown-linux-gnu
-            arch: x64
-          - platform: windows
-            os: windows-2025-vs2026
+            asset_suffix: linux-x64
+          - runner: windows-2025-vs2026
+            label: windows-x64
             target: x86_64-pc-windows-msvc
-            arch: x64
-          - platform: macos
-            os: macos-14
+            asset_suffix: windows-x64
+          - runner: macos-14
+            label: macos-arm64
             target: aarch64-apple-darwin
-            arch: arm64
+            asset_suffix: macos-arm64
 
-    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      - name: Install Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -69,10 +72,10 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          shared-key: ${{ matrix.platform }}-${{ matrix.arch }}
+          shared-key: ${{ matrix.label }}
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'linux'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -85,178 +88,166 @@ jobs:
             libayatana-appindicator3-dev
 
       - name: Install NSIS (Windows)
-        if: matrix.platform == 'windows'
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           choco install nsis -y
-          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          Write-Host "NSIS installed, makensis path:"
+          Get-Command makensis -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
 
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Get version from Cargo.toml
-        id: version
-        shell: bash
-        run: |
-          VERSION=$(grep '^version' src-tauri/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Building version: ${VERSION}"
-
       - name: Build Tauri application
+        shell: bash
         run: cargo tauri build --target ${{ matrix.target }}
         working-directory: src-tauri
 
-      - name: Package Linux artifacts
-        if: matrix.platform == 'linux'
+      - name: Package build (Linux)
+        if: runner.os == 'Linux'
         shell: bash
+        env:
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
-          ARCH=${{ matrix.arch }}
-          BASE_NAME="SecretWarehouse-v${VERSION}-linux-${ARCH}"
-          mkdir -p artifacts
+          set -euo pipefail
+          BASE_NAME="${APP_NAME}-${TAG_NAME}-${{ matrix.asset_suffix }}"
+          mkdir -p release
 
-          # Package AppImage
-          APPIMAGE_PATH=$(find src-tauri/target -name "*.AppImage" | head -1)
-          if [ -n "$APPIMAGE_PATH" ]; then
-            cp "$APPIMAGE_PATH" "artifacts/${BASE_NAME}.AppImage"
-            chmod +x "artifacts/${BASE_NAME}.AppImage"
+          # AppImage
+          APPIMAGE=$(find src-tauri/target -name "*.AppImage" | head -1)
+          if [ -n "$APPIMAGE" ]; then
+            cp "$APPIMAGE" "release/${BASE_NAME}.AppImage"
+            chmod +x "release/${BASE_NAME}.AppImage"
           fi
 
-          # Package tar.gz (from deb for simplicity)
-          DEB_PATH=$(find src-tauri/target -name "*.deb" | head -1)
-          if [ -n "$DEB_PATH" ]; then
-            cp "$DEB_PATH" "artifacts/${BASE_NAME}.deb"
+          # deb package
+          DEB=$(find src-tauri/target -name "*.deb" | head -1)
+          if [ -n "$DEB" ]; then
+            cp "$DEB" "release/${BASE_NAME}.deb"
           fi
 
-          # Create tar.gz with AppImage
-          if [ -n "$APPIMAGE_PATH" ]; then
-            mkdir -p tmp_package
-            cp "$APPIMAGE_PATH" "tmp_package/SecretWarehouse"
-            chmod +x "tmp_package/SecretWarehouse"
-            tar -czf "artifacts/${BASE_NAME}.tar.gz" -C tmp_package .
-            rm -rf tmp_package
+          # tar.gz portable
+          if [ -n "$APPIMAGE" ]; then
+            mkdir -p tmp_pkg
+            cp "$APPIMAGE" "tmp_pkg/${APP_NAME}"
+            chmod +x "tmp_pkg/${APP_NAME}"
+            tar -czf "release/${BASE_NAME}.tar.gz" -C tmp_pkg .
+            rm -rf tmp_pkg
           fi
 
-          ls -la artifacts/
+          ls -lh release/
 
-      - name: Package macOS artifacts
-        if: matrix.platform == 'macos'
+      - name: Package build (macOS)
+        if: runner.os == 'macOS'
         shell: bash
+        env:
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
-          ARCH=${{ matrix.arch }}
-          BASE_NAME="SecretWarehouse-v${VERSION}-macos-${ARCH}"
-          mkdir -p artifacts
+          set -euo pipefail
+          BASE_NAME="${APP_NAME}-${TAG_NAME}-${{ matrix.asset_suffix }}"
+          mkdir -p release
 
-          # Find and copy DMG
-          DMG_PATH=$(find src-tauri/target -name "*.dmg" | head -1)
-          if [ -n "$DMG_PATH" ]; then
-            cp "$DMG_PATH" "artifacts/${BASE_NAME}.dmg"
+          # DMG installer
+          DMG=$(find src-tauri/target -name "*.dmg" | head -1)
+          if [ -n "$DMG" ]; then
+            cp "$DMG" "release/${BASE_NAME}.dmg"
+            echo "Created DMG: ${BASE_NAME}.dmg"
           fi
 
-          # Create zip with .app bundle
-          APP_PATH=$(find src-tauri/target/release/bundle -name "*.app" -type d | head -1)
-          if [ -n "$APP_PATH" ]; then
-            cd "$(dirname "$APP_PATH")"
-            zip -r -y "${OLDPWD}/artifacts/${BASE_NAME}.zip" "$(basename "$APP_PATH")"
+          # Portable zip with .app bundle
+          APP_BUNDLE=$(find src-tauri/target/release/bundle -name "*.app" -type d | head -1)
+          if [ -n "$APP_BUNDLE" ]; then
+            cd "$(dirname "$APP_BUNDLE")"
+            /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(basename "$APP_BUNDLE")" "${OLDPWD}/release/${BASE_NAME}-portable.zip"
             cd "$OLDPWD"
+            echo "Created portable: ${BASE_NAME}-portable.zip"
           fi
 
-          ls -la artifacts/
+          ls -lh release/
 
-      - name: Package Windows artifacts
-        if: matrix.platform == 'windows'
+      - name: Package build (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
-          $VERSION = "${{ steps.version.outputs.version }}"
-          $ARCH = "${{ matrix.arch }}"
-          $BASE_NAME = "SecretWarehouse-v${VERSION}-windows-${ARCH}"
-          New-Item -ItemType Directory -Force -Path artifacts
+          $BASE_NAME = "${env:APP_NAME}-${env:TAG_NAME}-${{ matrix.asset_suffix }}"
+          New-Item -ItemType Directory -Force -Path release
 
-          # Find and copy NSIS installer (.exe)
-          $NSIS_PATH = Get-ChildItem -Path "src-tauri/target" -Filter "*.exe" -Recurse | Where-Object { $_.FullName -match "nsis" } | Select-Object -First 1
-          if ($NSIS_PATH) {
-            Copy-Item $NSIS_PATH.FullName "artifacts/${BASE_NAME}-setup.exe"
+          # NSIS installer
+          $NSIS_EXE = Get-ChildItem -Path "src-tauri/target" -Filter "*.exe" -Recurse |
+                      Where-Object { $_.FullName -match "nsis" } |
+                      Select-Object -First 1
+          if ($NSIS_EXE) {
+            Copy-Item $NSIS_EXE.FullName "release/${BASE_NAME}-installer.exe"
+            Write-Host "Created installer: ${BASE_NAME}-installer.exe"
           }
 
-          # Create zip with portable version
-          $EXE_PATH = Get-ChildItem -Path "src-tauri/target/release" -Filter "SecretWarehouse.exe" | Select-Object -First 1
-          if ($EXE_PATH) {
-            Compress-Archive -Path $EXE_PATH.FullName -DestinationPath "artifacts/${BASE_NAME}-portable.zip"
+          # Portable zip
+          $APP_EXE = Get-ChildItem -Path "src-tauri/target/release" -Filter "${env:APP_NAME}.exe" | Select-Object -First 1
+          if ($APP_EXE) {
+            Compress-Archive -Path $APP_EXE.FullName -DestinationPath "release/${BASE_NAME}-portable.zip" -Force
+            Write-Host "Created portable: ${BASE_NAME}-portable.zip"
           }
 
-          Get-ChildItem -Path artifacts
+          Get-ChildItem -Path release -File
 
-      - name: Upload Linux artifacts
-        if: matrix.platform == 'linux'
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ matrix.arch }}
-          path: artifacts/*
-          retention-days: 1
-
-      - name: Upload macOS artifacts
-        if: matrix.platform == 'macos'
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-${{ matrix.arch }}
-          path: artifacts/*
-          retention-days: 1
-
-      - name: Upload Windows artifacts
-        if: matrix.platform == 'windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-${{ matrix.arch }}
-          path: artifacts/*
-          retention-days: 1
+          name: ${{ matrix.label }}
+          path: release/*
+          if-no-files-found: error
 
   release:
-    needs: build
+    name: Publish Release
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: write
+    needs: build
 
     steps:
-      - name: Determine tag name
-        id: tag
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -lhR release-assets/
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+            tag_name="${{ inputs.tag_name }}"
+            release_name="${{ inputs.release_name }}"
+            prerelease="${{ inputs.prerelease }}"
+            draft="${{ inputs.draft }}"
           else
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            tag_name="${GITHUB_REF_NAME}"
+            release_name=""
+            prerelease="false"
+            draft="false"
           fi
 
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-x64
-          path: artifacts/linux-x64
+          if [ -z "$release_name" ]; then
+            release_name="${APP_NAME} ${tag_name}"
+          fi
 
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-arm64
-          path: artifacts/macos-arm64
+          echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
+          echo "release_name=$release_name" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "draft=$draft" >> "$GITHUB_OUTPUT"
 
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-x64
-          path: artifacts/windows-x64
-
-      - name: List all artifacts
-        run: find artifacts -type f -ls
-
-      - name: Create GitHub Release
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: ${{ github.event.inputs.release_name || format('SecretWarehouse {0}', steps.tag.outputs.tag) }}
-          draft: ${{ github.event.inputs.draft || false }}
-          prerelease: ${{ github.event.inputs.prerelease || false }}
+          tag_name: ${{ steps.meta.outputs.tag_name }}
+          name: ${{ steps.meta.outputs.release_name }}
+          target_commitish: ${{ github.sha }}
+          draft: ${{ steps.meta.outputs.draft == 'true' }}
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           generate_release_notes: true
-          files: |
-            artifacts/linux-x64/*
-            artifacts/macos-arm64/*
-            artifacts/windows-x64/*
+          files: release-assets/*
+          fail_on_unmatched_files: true
