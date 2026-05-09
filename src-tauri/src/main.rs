@@ -9,7 +9,7 @@ mod db;
 mod models;
 
 use db::DbState;
-use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
@@ -167,16 +167,14 @@ fn main() {
         .manage(db_state)
         .setup(|app| {
             // 创建系统托盘菜单
-            let show_item = MenuItemBuilder::with_id("show", "显示窗口").build(app)?;
-            let quick_search_item =
-                MenuItemBuilder::with_id("quick_search", "快速搜索 (Ctrl+Shift+P)").build(app)?;
+            let show_item = MenuItemBuilder::with_id("show", "显示主界面").build(app)?;
+            let settings_item = MenuItemBuilder::with_id("settings", "设置").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
             let menu = MenuBuilder::new(app)
                 .item(&show_item)
-                .item(&quick_search_item)
+                .item(&settings_item)
                 .separator()
-                .item(&PredefinedMenuItem::close_window(app, Some("关闭窗口"))?)
                 .item(&quit_item)
                 .build()?;
 
@@ -185,18 +183,19 @@ fn main() {
                 .menu(&menu)
                 .tooltip("SecretWarehouse - 安全密码管理器")
                 .icon(app.default_window_icon().unwrap().clone())
+                // 左键点击不显示菜单，直接显示主窗口
+                .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(app);
                     }
-                    "quick_search" => {
-                        show_quick_search_window(app);
+                    "settings" => {
+                        // 显示主窗口并打开设置
+                        show_main_window(app);
+                        let _ = app.emit("open-settings", ());
                     }
                     "quit" => {
-                        std::process::exit(0);
+                        app.exit(0);
                     }
                     _ => {}
                 })
@@ -207,12 +206,8 @@ fn main() {
                         ..
                     } = event
                     {
-                        // 左键点击显示主窗口
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        // 左键点击直接显示主窗口
+                        show_main_window(tray.app_handle());
                     }
                 })
                 .build(app)?;

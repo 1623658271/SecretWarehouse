@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { useStore } from './stores/useStore'
 import { ThemeProvider } from './components/ThemeProvider'
 import Sidebar from './components/Sidebar'
@@ -37,6 +38,16 @@ function AppContent() {
       invoke('set_close_to_tray', { closeToTray: settings.closeToTray })
     }
   }, [settings.closeToTray, isUnlocked])
+
+  // 监听托盘菜单的"设置"事件
+  useEffect(() => {
+    const unlisten = listen('open-settings', () => {
+      useStore.getState().setShowSettings(true)
+    })
+    return () => {
+      unlisten.then(fn => fn())
+    }
+  }, [])
 
   useEffect(() => {
     if (!initialized.current && isUnlocked) {
