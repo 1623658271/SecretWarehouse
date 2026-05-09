@@ -1084,24 +1084,6 @@ export default function Settings({ username }: SettingsProps) {
                 </button>
               </div>
 
-              {/* Ask on Close */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-slate-700 dark:text-slate-300">关闭时询问</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">关闭窗口时弹出选择对话框</div>
-                </div>
-                <button
-                  onClick={() => handleUpdateSettings({ askOnClose: !settings.askOnClose })}
-                  className={`relative w-11 h-6 rounded-full transition-colors ${
-                    settings.askOnClose ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
-                  }`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    settings.askOnClose ? 'translate-x-6' : 'translate-x-1'
-                  }`} />
-                </button>
-              </div>
-
               {/* Start Minimized */}
               <div className="flex items-center justify-between">
                 <div>

@@ -858,4 +858,10 @@ pub fn exit_app(app_handle: tauri::AppHandle) {
     app_handle.exit(0);
 }
 
+/// 更新关闭到托盘设置
+#[tauri::command]
+pub fn set_close_to_tray(close_to_tray: bool) {
+    crate::CLOSE_TO_TRAY.store(close_to_tray, std::sync::atomic::Ordering::Relaxed);
+}
+
 use crate::show_quick_search_window;

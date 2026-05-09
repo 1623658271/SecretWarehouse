@@ -20,7 +20,6 @@ interface AppSettings {
   quickSearchShortcut: string  // 快速搜索快捷键
   quickSearchShowPlaintext: boolean  // 快速搜索是否显示明文
   closeToTray: boolean  // 关闭时最小化到托盘
-  askOnClose: boolean  // 关闭时是否询问
   startMinimized: boolean  // 启动时最小化到托盘
   quickSearchPositionMode: string  // 'center' | 'custom'
   quickSearchCustomX: number  // 自定义X位置
@@ -42,7 +41,6 @@ const defaultSettings: AppSettings = {
   quickSearchShortcut: 'CommandOrControl+Shift+P',
   quickSearchShowPlaintext: false,
   closeToTray: true,
-  askOnClose: true,
   startMinimized: false,
   quickSearchPositionMode: 'center',
   quickSearchCustomX: 720,
@@ -478,6 +476,10 @@ export const useStore = create<AppState>((set, get) => ({
     const newSettings = { ...get().settings, ...partial }
     saveSettings(newSettings)
     set({ settings: newSettings })
+    // 同步 closeToTray 到 Rust
+    if ('closeToTray' in partial) {
+      invoke('set_close_to_tray', { closeToTray: newSettings.closeToTray })
+    }
   },
 
   resetSettings: () => {

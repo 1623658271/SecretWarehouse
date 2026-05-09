@@ -25,6 +25,11 @@ fn show_main_window(app: &tauri::AppHandle) {
 
 use crypto::is_session_active;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// 全局标志：是否关闭到托盘
+static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(true);
+
 /// 默认快捷键: Ctrl+Shift+P (Windows/Linux) / Command+Shift+P (macOS)
 const DEFAULT_SHORTCUT: &str = "CommandOrControl+Shift+P";
 
@@ -223,14 +228,17 @@ fn main() {
                 })?;
             }
 
-            // 窗口关闭时询问用户
+            // 窗口关闭时根据设置决定行为
             if let Some(window) = app.get_webview_window("main") {
-                let app_handle = app.handle().clone();
+                let window_clone = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        // 发送事件到前端，让前端决定是否询问
-                        let _ = app_handle.emit("close-requested", ());
+                        if CLOSE_TO_TRAY.load(Ordering::Relaxed) {
+                            // 关闭到托盘：阻止关闭并隐藏窗口
+                            api.prevent_close();
+                            let _ = window_clone.hide();
+                        }
+                        // 否则直接关闭窗口
                     }
                 });
 
@@ -288,6 +296,7 @@ fn main() {
             commands::register_quick_search_shortcut,
             commands::unregister_quick_search_shortcut,
             commands::exit_app,
+            commands::set_close_to_tray,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
