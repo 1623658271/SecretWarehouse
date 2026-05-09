@@ -472,13 +472,13 @@ export const useStore = create<AppState>((set, get) => ({
   // Settings actions
   setShowSettings: (show) => set({ showSettings: show }),
 
-  updateSettings: (partial) => {
+  updateSettings: async (partial) => {
     const newSettings = { ...get().settings, ...partial }
     saveSettings(newSettings)
     set({ settings: newSettings })
     // 同步 closeToTray 到 Rust
     if ('closeToTray' in partial) {
-      invoke('set_close_to_tray', { closeToTray: newSettings.closeToTray })
+      await invoke('set_close_to_tray', { closeToTray: newSettings.closeToTray })
     }
   },
 

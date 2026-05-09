@@ -31,14 +31,18 @@ function AppContent() {
   const setShowForm = useStore((s) => s.setShowForm)
   const initialized = useRef(false)
 
-  // 同步 closeToTray 设置到 Rust
+  // 同步 closeToTray 设置到 Rust（每次设置变化时）
   useEffect(() => {
-    invoke('set_close_to_tray', { closeToTray: settings.closeToTray })
-  }, [settings.closeToTray])
+    if (isUnlocked) {
+      invoke('set_close_to_tray', { closeToTray: settings.closeToTray })
+    }
+  }, [settings.closeToTray, isUnlocked])
 
   useEffect(() => {
     if (!initialized.current && isUnlocked) {
       initialized.current = true
+      // 同步初始设置到 Rust
+      invoke('set_close_to_tray', { closeToTray: settings.closeToTray })
       fetchSecrets()
     }
   }, [fetchSecrets, isUnlocked])
