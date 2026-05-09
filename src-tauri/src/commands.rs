@@ -884,4 +884,24 @@ pub fn rename_user(old_username: String, new_username: String) -> Result<(), Str
     crypto::rename_user(&old_username, &new_username)
 }
 
+/// 从设置中修改密码（已验证当前密码）
+#[tauri::command]
+pub fn change_password_from_settings(
+    state: State<'_, DbState>,
+    username: String,
+    old_password: String,
+    new_password: String,
+) -> Result<(), String> {
+    // 验证当前密码并获取 Master Key
+    let master_key = crypto::verify_and_get_master_key(&username, &old_password)?;
+
+    // 使用 Master Key 重置密码
+    crypto::reset_password_with_master_key(&username, master_key, &new_password)?;
+
+    // 初始化用户数据库
+    state.init_for_user(&username)?;
+
+    Ok(())
+}
+
 use crate::show_quick_search_window;

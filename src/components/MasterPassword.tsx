@@ -693,12 +693,15 @@ export default function MasterPassword({ onUnlock }: MasterPasswordProps) {
                 </div>
               </div>
 
-              {error && (
-                <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
+              {/* Error message - fixed height container */}
+              <div className="h-14">
+                {error && (
+                  <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm animate-in fade-in duration-200">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={handleChangePassword}

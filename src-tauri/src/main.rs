@@ -178,11 +178,13 @@ fn main() {
         .setup(|app| {
             // 创建系统托盘菜单
             let show_item = MenuItemBuilder::with_id("show", "显示主界面").build(app)?;
+            let quick_search_item = MenuItemBuilder::with_id("quick_search", "快速搜索 (Ctrl+Shift+P)").build(app)?;
             let settings_item = MenuItemBuilder::with_id("settings", "设置").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
             let menu = MenuBuilder::new(app)
                 .item(&show_item)
+                .item(&quick_search_item)
                 .item(&settings_item)
                 .separator()
                 .item(&quit_item)
@@ -201,6 +203,10 @@ fn main() {
                         "show" => {
                             eprintln!("[on_menu_event] show clicked");
                             show_main_window(app);
+                        }
+                        "quick_search" => {
+                            eprintln!("[on_menu_event] quick_search clicked");
+                            show_quick_search_window(app);
                         }
                         "settings" => {
                             eprintln!("[on_menu_event] settings clicked");
@@ -317,6 +323,7 @@ fn main() {
             commands::set_close_to_tray,
             commands::hide_main_window,
             commands::rename_user,
+            commands::change_password_from_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

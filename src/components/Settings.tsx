@@ -337,6 +337,16 @@ export default function Settings({ username }: SettingsProps) {
   const [renameMessage, setRenameMessage] = useState('')
   const [renameLoading, setRenameLoading] = useState(false)
 
+  // Change password state
+  const [showChangePasswordForm, setShowChangePasswordForm] = useState(false)
+  const [changePasswordOld, setChangePasswordOld] = useState('')
+  const [changePasswordNew, setChangePasswordNew] = useState('')
+  const [changePasswordConfirm, setChangePasswordConfirm] = useState('')
+  const [changePasswordStatus, setChangePasswordStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [changePasswordMessage, setChangePasswordMessage] = useState('')
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false)
+  const [showChangePasswordFields, setShowChangePasswordFields] = useState(false)
+
   // Security questions state
   const [hasSecurityQuestions, setHasSecurityQuestions] = useState(false)
   const [showSQForm, setShowSQForm] = useState(false)
@@ -507,6 +517,58 @@ export default function Settings({ username }: SettingsProps) {
       setTimeout(() => { setRenameStatus('idle'); setRenameMessage('') }, 3000)
     } finally {
       setRenameLoading(false)
+    }
+  }
+
+  // Handle change password
+  const handleChangePassword = async () => {
+    if (!changePasswordOld.trim()) {
+      setChangePasswordStatus('error')
+      setChangePasswordMessage('请输入当前密码')
+      setTimeout(() => { setChangePasswordStatus('idle'); setChangePasswordMessage('') }, 3000)
+      return
+    }
+
+    if (!changePasswordNew.trim()) {
+      setChangePasswordStatus('error')
+      setChangePasswordMessage('请输入新密码')
+      setTimeout(() => { setChangePasswordStatus('idle'); setChangePasswordMessage('') }, 3000)
+      return
+    }
+
+    if (changePasswordNew !== changePasswordConfirm) {
+      setChangePasswordStatus('error')
+      setChangePasswordMessage('两次输入的密码不一致')
+      setTimeout(() => { setChangePasswordStatus('idle'); setChangePasswordMessage('') }, 3000)
+      return
+    }
+
+    setChangePasswordLoading(true)
+    try {
+      await invoke('change_password_from_settings', {
+        username,
+        oldPassword: changePasswordOld,
+        newPassword: changePasswordNew
+      })
+      setChangePasswordStatus('success')
+      setChangePasswordMessage('密码修改成功！请重新登录。')
+      setTimeout(() => {
+        setChangePasswordStatus('idle')
+        setChangePasswordMessage('')
+        setShowChangePasswordForm(false)
+        setChangePasswordOld('')
+        setChangePasswordNew('')
+        setChangePasswordConfirm('')
+        setShowChangePasswordFields(false)
+        // 需要重新登录
+        window.location.reload()
+      }, 1500)
+    } catch (err) {
+      setChangePasswordStatus('error')
+      setChangePasswordMessage(`修改失败: ${err}`)
+      setTimeout(() => { setChangePasswordStatus('idle'); setChangePasswordMessage('') }, 3000)
+    } finally {
+      setChangePasswordLoading(false)
     }
   }
 
@@ -1115,6 +1177,24 @@ export default function Settings({ username }: SettingsProps) {
                   <span>{renameMessage}</span>
                 </div>
               )}
+
+              {/* Change Password */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Key className="w-4 h-4 text-slate-400" />
+                  <label className="text-sm text-slate-600 dark:text-slate-400">密码</label>
+                </div>
+                <button
+                  onClick={() => setShowChangePasswordForm(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>修改密码</span>
+                </button>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                  修改密码后需要重新登录
+                </p>
+              </div>
             </CollapsibleSection>
 
             {/* 行为 Section */}
@@ -1623,6 +1703,160 @@ export default function Settings({ username }: SettingsProps) {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Form Modal */}
+      {showChangePasswordForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md mx-4 border border-slate-200 dark:border-slate-700/60 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700/40">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">修改密码</h3>
+              <button
+                onClick={() => {
+                  setShowChangePasswordForm(false)
+                  setChangePasswordOld('')
+                  setChangePasswordNew('')
+                  setChangePasswordConfirm('')
+                  setShowChangePasswordFields(false)
+                  setChangePasswordStatus('idle')
+                  setChangePasswordMessage('')
+                }}
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              {!showChangePasswordFields ? (
+                <>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    请输入当前密码验证身份
+                  </p>
+                  <div>
+                    <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">当前密码</label>
+                    <input
+                      type="password"
+                      value={changePasswordOld}
+                      onChange={(e) => setChangePasswordOld(e.target.value)}
+                      placeholder="输入当前密码"
+                      className="w-full px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      autoFocus
+                    />
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!changePasswordOld.trim()) {
+                        setChangePasswordStatus('error')
+                        setChangePasswordMessage('请输入当前密码')
+                        setTimeout(() => { setChangePasswordStatus('idle'); setChangePasswordMessage('') }, 3000)
+                        return
+                      }
+                      try {
+                        const valid = await invoke<boolean>('verify_master_password', { username, password: changePasswordOld })
+                        if (valid) {
+                          setShowChangePasswordFields(true)
+                          setChangePasswordStatus('idle')
+                          setChangePasswordMessage('')
+                        } else {
+                          setChangePasswordStatus('error')
+                          setChangePasswordMessage('密码错误')
+                          setTimeout(() => { setChangePasswordStatus('idle'); setChangePasswordMessage('') }, 3000)
+                        }
+                      } catch (err) {
+                        setChangePasswordStatus('error')
+                        setChangePasswordMessage(`验证失败: ${err}`)
+                        setTimeout(() => { setChangePasswordStatus('idle'); setChangePasswordMessage('') }, 3000)
+                      }
+                    }}
+                    className="w-full py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl text-sm font-medium transition-colors"
+                  >
+                    验证密码
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    请设置新密码
+                  </p>
+                  <div>
+                    <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">新密码</label>
+                    <input
+                      type="password"
+                      value={changePasswordNew}
+                      onChange={(e) => setChangePasswordNew(e.target.value)}
+                      placeholder="输入新密码"
+                      className="w-full px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">确认新密码</label>
+                    <input
+                      type="password"
+                      value={changePasswordConfirm}
+                      onChange={(e) => setChangePasswordConfirm(e.target.value)}
+                      placeholder="再次输入新密码"
+                      className="w-full px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Status Message - fixed height */}
+              <div className="h-12">
+                {changePasswordMessage && (
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                    changePasswordStatus === 'success'
+                      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                      : changePasswordStatus === 'error'
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {changePasswordStatus === 'success' && <Check className="w-4 h-4" />}
+                    <span>{changePasswordMessage}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            {showChangePasswordFields && (
+              <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-700/40">
+                <button
+                  onClick={() => {
+                    setShowChangePasswordForm(false)
+                    setChangePasswordOld('')
+                    setChangePasswordNew('')
+                    setChangePasswordConfirm('')
+                    setShowChangePasswordFields(false)
+                    setChangePasswordStatus('idle')
+                    setChangePasswordMessage('')
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleChangePassword}
+                  disabled={changePasswordLoading || !changePasswordNew.trim() || !changePasswordConfirm.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {changePasswordLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>确认修改</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
