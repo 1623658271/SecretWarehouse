@@ -41,17 +41,24 @@ function AppContent() {
     const unlisten = listen('close-requested', async () => {
       // 从 store 获取最新的设置值
       const currentSettings = useStore.getState().settings
+      console.log('Close requested, settings:', currentSettings)
+
       if (currentSettings.askOnClose) {
         setShowCloseDialog(true)
       } else {
         // 不询问，直接按设置执行
         if (currentSettings.closeToTray) {
+          console.log('Hiding window to tray...')
           try {
-            await getCurrentWindow().hide()
+            const window = getCurrentWindow()
+            console.log('Got window:', window.label)
+            await window.hide()
+            console.log('Window hidden successfully')
           } catch (e) {
             console.error('Failed to hide window:', e)
           }
         } else {
+          console.log('Exiting app...')
           invoke('exit_app')
         }
       }
