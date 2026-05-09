@@ -10,8 +10,6 @@ import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
 
-const appWindow = getCurrentWindow()
-
 interface SettingsProps {
   username: string
 }
@@ -496,6 +494,7 @@ export default function Settings({ username }: SettingsProps) {
   // Apply window size
   const applyWindowSize = async (size: string, width: number, height: number) => {
     try {
+      const appWindow = getCurrentWindow()
       if (size === 'maximized') {
         await appWindow.maximize()
         await appWindow.setFullscreen(false)
