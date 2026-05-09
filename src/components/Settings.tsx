@@ -4,7 +4,8 @@ import { useTheme } from './ThemeProvider'
 import {
   X, Sun, Moon, Monitor, LayoutGrid, Space, RotateCcw, Maximize2, Check, Star, Eye, Key,
   Database, Download, Upload, Palette, AlignLeft, Archive, ShieldCheck, Plus,
-  Crosshair, Move, CheckCircle, HelpCircle, Trash2, Save, ChevronRight, ChevronDown, Zap
+  Crosshair, Move, CheckCircle, HelpCircle, Trash2, Save, ChevronRight, ChevronDown, Zap,
+  User, Pencil
 } from 'lucide-react'
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
@@ -329,6 +330,13 @@ export default function Settings({ username }: SettingsProps) {
   const [screenSize, setScreenSize] = useState({ width: 1920, height: 1080 })
   const [showPositionPicker, setShowPositionPicker] = useState(false)
 
+  // Username rename state
+  const [showRenameForm, setShowRenameForm] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [renameStatus, setRenameStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [renameMessage, setRenameMessage] = useState('')
+  const [renameLoading, setRenameLoading] = useState(false)
+
   // Security questions state
   const [hasSecurityQuestions, setHasSecurityQuestions] = useState(false)
   const [showSQForm, setShowSQForm] = useState(false)
@@ -462,6 +470,43 @@ export default function Settings({ username }: SettingsProps) {
       setTimeout(() => { setSQStatus('idle'); setSQMessage('') }, 3000)
     } finally {
       setSQLoading(false)
+    }
+  }
+
+  // Handle rename username
+  const handleRenameUsername = async () => {
+    if (!newUsername.trim()) {
+      setRenameStatus('error')
+      setRenameMessage('用户名不能为空')
+      setTimeout(() => { setRenameStatus('idle'); setRenameMessage('') }, 3000)
+      return
+    }
+
+    if (newUsername === username) {
+      setShowRenameForm(false)
+      setNewUsername('')
+      return
+    }
+
+    setRenameLoading(true)
+    try {
+      await invoke('rename_user', { oldUsername: username, newUsername: newUsername.trim() })
+      setRenameStatus('success')
+      setRenameMessage('用户名修改成功！请重新登录。')
+      setTimeout(() => {
+        setRenameStatus('idle')
+        setRenameMessage('')
+        setShowRenameForm(false)
+        setNewUsername('')
+        // 需要重新登录
+        window.location.reload()
+      }, 1500)
+    } catch (err) {
+      setRenameStatus('error')
+      setRenameMessage(`修改失败: ${err}`)
+      setTimeout(() => { setRenameStatus('idle'); setRenameMessage('') }, 3000)
+    } finally {
+      setRenameLoading(false)
     }
   }
 
@@ -1030,6 +1075,48 @@ export default function Settings({ username }: SettingsProps) {
               </div>
             </CollapsibleSection>
 
+            {/* 账户 Section */}
+            <CollapsibleSection icon={User} title="账户">
+
+              {/* Current Username Display */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <User className="w-4 h-4 text-slate-400" />
+                  <label className="text-sm text-slate-600 dark:text-slate-400">当前用户名</label>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{username}</span>
+                  <button
+                    onClick={() => {
+                      setNewUsername(username)
+                      setShowRenameForm(true)
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 hover:bg-violet-600 text-white rounded-lg text-sm transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>修改</span>
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                  修改用户名会重命名数据目录和数据库文件
+                </p>
+              </div>
+
+              {/* Rename Status Message */}
+              {renameMessage && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                  renameStatus === 'success'
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                    : renameStatus === 'error'
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}>
+                  {renameStatus === 'success' && <Check className="w-4 h-4" />}
+                  <span>{renameMessage}</span>
+                </div>
+              )}
+            </CollapsibleSection>
+
             {/* 行为 Section */}
             <CollapsibleSection icon={Zap} title="行为">
 
@@ -1449,6 +1536,89 @@ export default function Settings({ username }: SettingsProps) {
                   <>
                     <Save className="w-4 h-4" />
                     <span>保存</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Username Form Modal */}
+      {showRenameForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md mx-4 border border-slate-200 dark:border-slate-700/60 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700/40">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">修改用户名</h3>
+              <button
+                onClick={() => {
+                  setShowRenameForm(false)
+                  setNewUsername('')
+                }}
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  <strong>注意：</strong>修改用户名后需要重新登录。数据目录和数据库文件将被重命名。
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">新用户名</label>
+                <input
+                  type="text"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  placeholder="输入新用户名"
+                  className="w-full px-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  autoFocus
+                />
+              </div>
+
+              {/* Status Message */}
+              {renameMessage && (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                  renameStatus === 'success'
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                    : renameStatus === 'error'
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}>
+                  {renameStatus === 'success' && <Check className="w-4 h-4" />}
+                  <span>{renameMessage}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-700/40">
+              <button
+                onClick={() => {
+                  setShowRenameForm(false)
+                  setNewUsername('')
+                }}
+                className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRenameUsername}
+                disabled={renameLoading || !newUsername.trim()}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {renameLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>确认修改</span>
                   </>
                 )}
               </button>

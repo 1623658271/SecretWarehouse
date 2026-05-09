@@ -613,6 +613,48 @@ pub fn get_db_path(username: &str) -> PathBuf {
     get_user_data_dir(username).join(format!("data_{}.db", username))
 }
 
+/// 重命名用户（修改用户名）
+/// 会重命名用户目录和数据库文件
+pub fn rename_user(old_username: &str, new_username: &str) -> Result<(), String> {
+    // 检查旧用户是否存在
+    if !user_exists(old_username) {
+        return Err("原用户不存在".to_string());
+    }
+
+    // 检查新用户名是否已存在
+    if user_exists(new_username) {
+        return Err("新用户名已存在".to_string());
+    }
+
+    // 检查新用户名目录是否已存在（可能是不完整的用户数据）
+    if user_dir_exists(new_username) {
+        return Err("新用户名目录已存在，请选择其他用户名".to_string());
+    }
+
+    let old_dir = get_user_data_dir(old_username);
+    let new_dir = get_user_data_dir(new_username);
+
+    // 1. 先重命名数据库文件（在旧目录中）
+    let old_db = get_db_path(old_username);
+    let new_db_old_dir = old_dir.join(format!("data_{}.db", new_username));
+    if old_db.exists() {
+        std::fs::rename(&old_db, &new_db_old_dir)
+            .map_err(|e| format!("重命名数据库文件失败: {}", e))?;
+    }
+
+    // 2. 重命名整个用户目录
+    std::fs::rename(&old_dir, &new_dir)
+        .map_err(|e| format!("重命名用户目录失败: {}", e))?;
+
+    // 3. 更新当前用户名（如果是当前登录用户）
+    if get_current_username() == Some(old_username.to_string()) {
+        let mut current_user = CURRENT_USERNAME.lock().map_err(|e| e.to_string())?;
+        *current_user = Some(new_username.to_string());
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

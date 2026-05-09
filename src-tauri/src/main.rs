@@ -315,6 +315,8 @@ fn main() {
             commands::unregister_quick_search_shortcut,
             commands::exit_app,
             commands::set_close_to_tray,
+            commands::hide_main_window,
+            commands::rename_user,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

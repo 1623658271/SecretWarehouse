@@ -864,4 +864,24 @@ pub fn set_close_to_tray(close_to_tray: bool) {
     crate::CLOSE_TO_TRAY.store(close_to_tray, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// 隐藏主窗口（用于启动时最小化到托盘）
+#[tauri::command]
+pub fn hide_main_window(app_handle: tauri::AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
+
+/// 重命名用户
+#[tauri::command]
+pub fn rename_user(old_username: String, new_username: String) -> Result<(), String> {
+    if old_username == new_username {
+        return Ok(()); // 用户名相同，无需修改
+    }
+    if new_username.trim().is_empty() {
+        return Err("用户名不能为空".to_string());
+    }
+    crypto::rename_user(&old_username, &new_username)
+}
+
 use crate::show_quick_search_window;

@@ -69,6 +69,10 @@ function AppContent() {
     setCurrentUsername(username)
     setIsUnlocked(true)
     fetchSecrets()
+    // 如果启用了"启动时最小化到托盘"，登录后立即隐藏窗口
+    if (settings.startMinimized) {
+      invoke('hide_main_window')
+    }
   }
 
   const handleLogout = async () => {
