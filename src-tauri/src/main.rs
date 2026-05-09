@@ -16,10 +16,20 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 
 /// 显示主窗口
 fn show_main_window(app: &tauri::AppHandle) {
+    eprintln!("[show_main_window] Called");
     if let Some(window) = app.get_webview_window("main") {
+        eprintln!("[show_main_window] Got window, calling show()");
+        // 在 Windows 上，需要确保窗口从隐藏状态正确恢复
         let _ = window.show();
         let _ = window.unminimize();
+        // 使用 set_focus 来确保窗口获得焦点并显示在前台
         let _ = window.set_focus();
+        // 如果窗口仍然不可见，尝试设置为置顶再取消（Windows 特有处理）
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_always_on_top(false);
+        eprintln!("[show_main_window] Done");
+    } else {
+        eprintln!("[show_main_window] Window 'main' not found!");
     }
 }
 
@@ -185,27 +195,37 @@ fn main() {
                 .icon(app.default_window_icon().unwrap().clone())
                 // 左键点击不显示菜单，直接显示主窗口
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "show" => {
-                        show_main_window(app);
+                .on_menu_event(|app, event| {
+                    eprintln!("[on_menu_event] Event: {:?}", event.id());
+                    match event.id().as_ref() {
+                        "show" => {
+                            eprintln!("[on_menu_event] show clicked");
+                            show_main_window(app);
+                        }
+                        "settings" => {
+                            eprintln!("[on_menu_event] settings clicked");
+                            // 显示主窗口并打开设置
+                            show_main_window(app);
+                            let _ = app.emit("open-settings", ());
+                        }
+                        "quit" => {
+                            eprintln!("[on_menu_event] quit clicked");
+                            app.exit(0);
+                        }
+                        _ => {
+                            eprintln!("[on_menu_event] unknown event: {:?}", event.id());
+                        }
                     }
-                    "settings" => {
-                        // 显示主窗口并打开设置
-                        show_main_window(app);
-                        let _ = app.emit("open-settings", ());
-                    }
-                    "quit" => {
-                        app.exit(0);
-                    }
-                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
+                    eprintln!("[on_tray_icon_event] Event: {:?}", event);
                     if let tauri::tray::TrayIconEvent::Click {
                         button: tauri::tray::MouseButton::Left,
                         button_state: tauri::tray::MouseButtonState::Up,
                         ..
                     } = event
                     {
+                        eprintln!("[on_tray_icon_event] Left click detected");
                         // 左键点击直接显示主窗口
                         show_main_window(tray.app_handle());
                     }
