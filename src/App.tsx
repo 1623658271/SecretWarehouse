@@ -38,7 +38,12 @@ function AppContent() {
 
   // 监听关闭请求事件
   useEffect(() => {
-    const unlisten = listen('close-requested', async () => {
+    // 检查是否在 Tauri 环境中
+    if (!(window as any).__TAURI_INTERNALS__) return
+
+    let unlistenFn: (() => void) | null = null
+
+    listen('close-requested', async () => {
       // 从 store 获取最新的设置值
       const currentSettings = useStore.getState().settings
       console.log('Close requested, settings:', currentSettings)
@@ -62,10 +67,12 @@ function AppContent() {
           invoke('exit_app')
         }
       }
+    }).then((fn) => {
+      unlistenFn = fn
     })
 
     return () => {
-      unlisten.then(fn => fn())
+      if (unlistenFn) unlistenFn()
     }
   }, [])
 
