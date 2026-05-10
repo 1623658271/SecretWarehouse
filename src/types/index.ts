@@ -3,6 +3,7 @@ export interface SecretEntry {
   title: string
   description: string
   fields: Record<string, string>  // 自由键值对
+  fieldOrder: string[]  // 字段顺序（显式保持）
   sensitiveFields: string[]  // 需要遮蔽的字段名列表
   tags: string[]
   icon: string  // 图标名称
@@ -15,6 +16,7 @@ export interface CreateSecretRequest {
   title: string
   description?: string
   fields: Record<string, string>
+  fieldOrder: string[]  // 字段顺序
   sensitiveFields?: string[]
   tags?: string[]
   icon?: string
@@ -25,6 +27,7 @@ export interface UpdateSecretRequest {
   title?: string
   description?: string
   fields?: Record<string, string>
+  fieldOrder?: string[]  // 字段顺序
   sensitiveFields?: string[]
   tags?: string[]
   icon?: string

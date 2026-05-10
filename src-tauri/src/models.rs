@@ -7,6 +7,8 @@ pub struct SecretEntry {
     pub title: String,
     pub description: String,
     pub fields: IndexMap<String, String>,
+    #[serde(default, rename = "fieldOrder")]
+    pub field_order: Vec<String>,  // 显式保持字段顺序
     #[serde(default, rename = "sensitiveFields")]
     pub sensitive_fields: Vec<String>,
     pub tags: Vec<String>,
@@ -22,6 +24,8 @@ pub struct CreateSecretRequest {
     #[serde(default)]
     pub description: String,
     pub fields: IndexMap<String, String>,
+    #[serde(default, rename = "fieldOrder")]
+    pub field_order: Vec<String>,  // 显式保持字段顺序
     #[serde(default, rename = "sensitiveFields")]
     pub sensitive_fields: Vec<String>,
     #[serde(default)]
@@ -40,6 +44,8 @@ pub struct UpdateSecretRequest {
     pub title: Option<String>,
     pub description: Option<String>,
     pub fields: Option<IndexMap<String, String>>,
+    #[serde(rename = "fieldOrder")]
+    pub field_order: Option<Vec<String>>,  // 显式保持字段顺序
     #[serde(rename = "sensitiveFields")]
     pub sensitive_fields: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,

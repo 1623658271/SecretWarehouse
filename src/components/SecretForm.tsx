@@ -27,10 +27,10 @@ export default function SecretForm() {
   )
   const [fields, setFields] = useState<Array<FieldItem>>(
     editingSecret
-      ? Object.entries(editingSecret.fields).map(([key, value]) => ({
+      ? (editingSecret.fieldOrder || Object.keys(editingSecret.fields)).map(key => ({
           id: generateFieldId(),
           key,
-          value,
+          value: editingSecret.fields[key],
           sensitive: editingSecret.sensitiveFields?.includes(key) || false
         }))
       : selectedTemplate?.fields.map(key => ({ id: generateFieldId(), key, value: '', sensitive: false })) || [{ id: generateFieldId(), key: '', value: '', sensitive: false }]
@@ -60,25 +60,23 @@ export default function SecretForm() {
 
     try {
       const fieldsObj: Record<string, string> = {}
+      const fieldOrder: string[] = []
       const sensitiveFields: string[] = []
       fields.forEach(f => {
-        if (f.key.trim()) {
-          fieldsObj[f.key.trim()] = f.value
+        const key = f.key.trim()
+        if (key) {
+          fieldsObj[key] = f.value
+          fieldOrder.push(key)  // 显式保持字段顺序
           if (f.sensitive) {
-            sensitiveFields.push(f.key.trim())
+            sensitiveFields.push(key)
           }
         }
       })
 
-      // DEBUG: 输出字段顺序
-      console.log('前端fields数组顺序:', fields.map(f => f.key))
-      console.log('前端fieldsObj键顺序:', Object.keys(fieldsObj))
-
       if (editingSecret) {
-        const result = await updateSecret({ id: editingSecret.id, title, description, fields: fieldsObj, tags, icon, sensitiveFields })
-        console.log('后端返回fields键顺序:', Object.keys(result.fields))
+        await updateSecret({ id: editingSecret.id, title, description, fields: fieldsObj, fieldOrder, tags, icon, sensitiveFields })
       } else {
-        await createSecret({ title, description, fields: fieldsObj, tags, icon, sensitiveFields })
+        await createSecret({ title, description, fields: fieldsObj, fieldOrder, tags, icon, sensitiveFields })
       }
       setEditingSecret(null)
       setShowForm(false)

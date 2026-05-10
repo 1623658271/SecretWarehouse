@@ -83,6 +83,11 @@ impl DbState {
             "ALTER TABLE secrets ADD COLUMN sensitive_fields TEXT DEFAULT '[]';"
         );
 
+        // 添加 field_order 列（如果不存在）
+        let _ = conn.execute_batch(
+            "ALTER TABLE secrets ADD COLUMN field_order TEXT DEFAULT '[]';"
+        );
+
         // 更新连接和用户名
         let mut state_conn = self.conn.lock().map_err(|e| e.to_string())?;
         *state_conn = conn;
@@ -100,12 +105,19 @@ impl DbState {
         let id = uuid::Uuid::new_v4().to_string();
         let tags_json = serde_json::to_string(&req.tags).unwrap_or_default();
         let sensitive_fields_json = serde_json::to_string(&req.sensitive_fields).unwrap_or_default();
+        // 如果没有提供 field_order，使用 fields 的键顺序
+        let field_order = if req.field_order.is_empty() {
+            req.fields.keys().cloned().collect::<Vec<_>>()
+        } else {
+            req.field_order
+        };
+        let field_order_json = serde_json::to_string(&field_order).unwrap_or_default();
 
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
-            "INSERT INTO secrets (id, icon, title, description, encrypted_fields, sensitive_fields, tags, created_at, updated_at, favorite)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)",
-            params![id, req.icon, req.title, req.description, encrypted_fields, sensitive_fields_json, tags_json, now, now],
+            "INSERT INTO secrets (id, icon, title, description, encrypted_fields, field_order, sensitive_fields, tags, created_at, updated_at, favorite)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0)",
+            params![id, req.icon, req.title, req.description, encrypted_fields, field_order_json, sensitive_fields_json, tags_json, now, now],
         ).map_err(|e| format!("插入失败: {}", e))?;
 
         Ok(SecretEntry {
@@ -114,6 +126,7 @@ impl DbState {
             title: req.title,
             description: req.description,
             fields: req.fields,
+            field_order,
             sensitive_fields: req.sensitive_fields,
             tags: req.tags,
             created_at: now,
@@ -127,7 +140,7 @@ impl DbState {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
 
         conn.query_row(
-            "SELECT id, icon, title, description, encrypted_fields, sensitive_fields, tags, created_at, updated_at, favorite FROM secrets WHERE id = ?1",
+            "SELECT id, icon, title, description, encrypted_fields, field_order, sensitive_fields, tags, created_at, updated_at, favorite FROM secrets WHERE id = ?1",
             params![id],
             |row| {
                 let id: String = row.get(0)?;
@@ -135,17 +148,23 @@ impl DbState {
                 let title: String = row.get(2)?;
                 let description: String = row.get(3).unwrap_or_default();
                 let encrypted_fields: String = row.get(4)?;
-                let sensitive_fields_json: String = row.get(5).unwrap_or_else(|_| "[]".to_string());
-                let tags_json: String = row.get(6)?;
-                let created_at: i64 = row.get(7)?;
-                let updated_at: i64 = row.get(8)?;
-                let favorite: bool = row.get::<_, i64>(9)? != 0;
+                let field_order_json: String = row.get(5).unwrap_or_else(|_| "[]".to_string());
+                let sensitive_fields_json: String = row.get(6).unwrap_or_else(|_| "[]".to_string());
+                let tags_json: String = row.get(7)?;
+                let created_at: i64 = row.get(8)?;
+                let updated_at: i64 = row.get(9)?;
+                let favorite: bool = row.get::<_, i64>(10)? != 0;
 
                 let fields = crypto::decrypt_fields(&encrypted_fields, &key)
                     .unwrap_or_else(|e| {
                         eprintln!("解密失败 (id: {}): {}", id, e);
                         Default::default()
                     });
+                let mut field_order: Vec<String> = serde_json::from_str(&field_order_json).unwrap_or_default();
+                // 如果 field_order 为空，使用 fields 的键顺序（兼容旧数据）
+                if field_order.is_empty() {
+                    field_order = fields.keys().cloned().collect();
+                }
                 let sensitive_fields: Vec<String> = serde_json::from_str(&sensitive_fields_json).unwrap_or_default();
                 let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
 
@@ -155,6 +174,7 @@ impl DbState {
                     title,
                     description,
                     fields,
+                    field_order,
                     sensitive_fields,
                     tags,
                     created_at,
@@ -170,7 +190,7 @@ impl DbState {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
 
         let mut query = String::from(
-            "SELECT id, icon, title, description, encrypted_fields, sensitive_fields, tags, created_at, updated_at, favorite FROM secrets WHERE 1=1",
+            "SELECT id, icon, title, description, encrypted_fields, field_order, sensitive_fields, tags, created_at, updated_at, favorite FROM secrets WHERE 1=1",
         );
         let mut params_vec: Vec<String> = Vec::new();
 
@@ -206,17 +226,23 @@ impl DbState {
                 let title: String = row.get(2)?;
                 let description: String = row.get(3).unwrap_or_default();
                 let encrypted_fields: String = row.get(4)?;
-                let sensitive_fields_json: String = row.get(5).unwrap_or_else(|_| "[]".to_string());
-                let tags_json: String = row.get(6)?;
-                let created_at: i64 = row.get(7)?;
-                let updated_at: i64 = row.get(8)?;
-                let favorite: bool = row.get::<_, i64>(9)? != 0;
+                let field_order_json: String = row.get(5).unwrap_or_else(|_| "[]".to_string());
+                let sensitive_fields_json: String = row.get(6).unwrap_or_else(|_| "[]".to_string());
+                let tags_json: String = row.get(7)?;
+                let created_at: i64 = row.get(8)?;
+                let updated_at: i64 = row.get(9)?;
+                let favorite: bool = row.get::<_, i64>(10)? != 0;
 
                 let fields = crypto::decrypt_fields(&encrypted_fields, &key)
                     .unwrap_or_else(|e| {
                         eprintln!("解密失败 (id: {}): {}", id, e);
                         Default::default()
                     });
+                let mut field_order: Vec<String> = serde_json::from_str(&field_order_json).unwrap_or_default();
+                // 如果 field_order 为空，使用 fields 的键顺序（兼容旧数据）
+                if field_order.is_empty() {
+                    field_order = fields.keys().cloned().collect();
+                }
                 let sensitive_fields: Vec<String> = serde_json::from_str(&sensitive_fields_json).unwrap_or_default();
                 let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
 
@@ -226,6 +252,7 @@ impl DbState {
                     title,
                     description,
                     fields,
+                    field_order,
                     sensitive_fields,
                     tags,
                     created_at,
@@ -274,18 +301,21 @@ impl DbState {
         let title = req.title.unwrap_or(existing.title);
         let description = req.description.unwrap_or(existing.description);
         let fields = req.fields.unwrap_or(existing.fields);
+        // 如果提供了 field_order，使用它；否则保留现有的
+        let field_order = req.field_order.unwrap_or(existing.field_order);
         let sensitive_fields = req.sensitive_fields.unwrap_or(existing.sensitive_fields);
         let tags = req.tags.unwrap_or(existing.tags);
         let icon = req.icon.unwrap_or(existing.icon);
         let favorite = req.favorite.unwrap_or(existing.favorite);
 
         let encrypted_fields = crypto::encrypt_fields(&fields, &key)?;
+        let field_order_json = serde_json::to_string(&field_order).unwrap_or_default();
         let sensitive_fields_json = serde_json::to_string(&sensitive_fields).unwrap_or_default();
         let tags_json = serde_json::to_string(&tags).unwrap_or_default();
 
         conn.execute(
-            "UPDATE secrets SET title = ?1, description = ?2, encrypted_fields = ?3, sensitive_fields = ?4, tags = ?5, icon = ?6, updated_at = ?7, favorite = ?8 WHERE id = ?9",
-            params![title, description, encrypted_fields, sensitive_fields_json, tags_json, icon, now, if favorite { 1 } else { 0 }, req.id],
+            "UPDATE secrets SET title = ?1, description = ?2, encrypted_fields = ?3, field_order = ?4, sensitive_fields = ?5, tags = ?6, icon = ?7, updated_at = ?8, favorite = ?9 WHERE id = ?10",
+            params![title, description, encrypted_fields, field_order_json, sensitive_fields_json, tags_json, icon, now, if favorite { 1 } else { 0 }, req.id],
         ).map_err(|e| format!("更新失败: {}", e))?;
 
         Ok(SecretEntry {
@@ -294,6 +324,7 @@ impl DbState {
             title,
             description,
             fields,
+            field_order,
             sensitive_fields,
             tags,
             created_at: existing.created_at,
@@ -364,7 +395,7 @@ impl DbState {
         // 获取所有记录，在 Rust 中进行模糊匹配
         // 因为字段是加密的，无法在 SQL 中搜索
         let sql = "
-            SELECT id, icon, title, description, encrypted_fields, sensitive_fields, tags, created_at, updated_at, favorite
+            SELECT id, icon, title, description, encrypted_fields, field_order, sensitive_fields, tags, created_at, updated_at, favorite
             FROM secrets
             ORDER BY updated_at DESC
         ";
@@ -376,17 +407,23 @@ impl DbState {
             let title: String = row.get(2)?;
             let description: String = row.get(3).unwrap_or_default();
             let encrypted_fields: String = row.get(4)?;
-            let sensitive_fields_json: String = row.get(5).unwrap_or_else(|_| "[]".to_string());
-            let tags_json: String = row.get(6)?;
-            let created_at: i64 = row.get(7)?;
-            let updated_at: i64 = row.get(8)?;
-            let favorite: bool = row.get::<_, i64>(9)? != 0;
+            let field_order_json: String = row.get(5).unwrap_or_else(|_| "[]".to_string());
+            let sensitive_fields_json: String = row.get(6).unwrap_or_else(|_| "[]".to_string());
+            let tags_json: String = row.get(7)?;
+            let created_at: i64 = row.get(8)?;
+            let updated_at: i64 = row.get(9)?;
+            let favorite: bool = row.get::<_, i64>(10)? != 0;
 
             let fields = crypto::decrypt_fields(&encrypted_fields, &key)
                 .unwrap_or_else(|e| {
                     eprintln!("解密失败 (id: {}): {}", id, e);
                     Default::default()
                 });
+            let mut field_order: Vec<String> = serde_json::from_str(&field_order_json).unwrap_or_default();
+            // 如果 field_order 为空，使用 fields 的键顺序（兼容旧数据）
+            if field_order.is_empty() {
+                field_order = fields.keys().cloned().collect();
+            }
             let sensitive_fields: Vec<String> = serde_json::from_str(&sensitive_fields_json).unwrap_or_default();
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
 
@@ -396,6 +433,7 @@ impl DbState {
                 title,
                 description,
                 fields,
+                field_order,
                 sensitive_fields,
                 tags,
                 created_at,

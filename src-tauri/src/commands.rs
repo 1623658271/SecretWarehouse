@@ -16,17 +16,16 @@ pub fn create_secret(
     title: String,
     description: Option<String>,
     fields: IndexMap<String, String>,
+    field_order: Option<Vec<String>>,
     sensitive_fields: Option<Vec<String>>,
     tags: Option<Vec<String>>,
     icon: Option<String>,
 ) -> Result<SecretEntry, String> {
-    // DEBUG: 输出接收到的字段顺序
-    eprintln!("Rust接收fields键顺序: {:?}", fields.keys().collect::<Vec<_>>());
-
     let req = CreateSecretRequest {
         title,
         description: description.unwrap_or_default(),
         fields,
+        field_order: field_order.unwrap_or_default(),
         sensitive_fields: sensitive_fields.unwrap_or_default(),
         tags: tags.unwrap_or_default(),
         icon: icon.unwrap_or_else(|| "key".to_string()),
@@ -74,21 +73,18 @@ pub fn update_secret(
     title: Option<String>,
     description: Option<String>,
     fields: Option<IndexMap<String, String>>,
+    field_order: Option<Vec<String>>,
     sensitive_fields: Option<Vec<String>>,
     tags: Option<Vec<String>>,
     icon: Option<String>,
     favorite: Option<bool>,
 ) -> Result<SecretEntry, String> {
-    // DEBUG: 输出接收到的字段顺序
-    if let Some(ref f) = fields {
-        eprintln!("Rust update接收fields键顺序: {:?}", f.keys().collect::<Vec<_>>());
-    }
-
     let req = UpdateSecretRequest {
         id,
         title,
         description,
         fields,
+        field_order,
         sensitive_fields,
         tags,
         icon,
@@ -252,6 +248,7 @@ pub fn generate_test_data(state: State<'_, DbState>, count: i32) -> Result<i32, 
             title,
             description,
             fields,
+            field_order: vec![],  // 使用默认顺序
             sensitive_fields,
             tags: selected_tags,
             icon,

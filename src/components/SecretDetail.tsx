@@ -132,7 +132,8 @@ export default function SecretDetail() {
 
           {/* Fields */}
           <div className="space-y-4">
-            {Object.entries(currentSecret.fields).map(([key, value], index) => {
+            {(currentSecret.fieldOrder || Object.keys(currentSecret.fields)).map((key, index) => {
+              const value = currentSecret.fields[key]
               const isSensitive = currentSecret.sensitiveFields?.includes(key) || false
               const isVisible = showSensitive[key]
 
