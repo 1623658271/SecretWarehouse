@@ -11,6 +11,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 type ImportedSecretRow = (String, String, String, String, String, String, i64, i64, i64);
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn create_secret(
     state: State<'_, DbState>,
     title: String,
