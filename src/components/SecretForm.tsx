@@ -70,8 +70,13 @@ export default function SecretForm() {
         }
       })
 
+      // DEBUG: 输出字段顺序
+      console.log('前端fields数组顺序:', fields.map(f => f.key))
+      console.log('前端fieldsObj键顺序:', Object.keys(fieldsObj))
+
       if (editingSecret) {
-        await updateSecret({ id: editingSecret.id, title, description, fields: fieldsObj, tags, icon, sensitiveFields })
+        const result = await updateSecret({ id: editingSecret.id, title, description, fields: fieldsObj, tags, icon, sensitiveFields })
+        console.log('后端返回fields键顺序:', Object.keys(result.fields))
       } else {
         await createSecret({ title, description, fields: fieldsObj, tags, icon, sensitiveFields })
       }

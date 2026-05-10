@@ -20,6 +20,9 @@ pub fn create_secret(
     tags: Option<Vec<String>>,
     icon: Option<String>,
 ) -> Result<SecretEntry, String> {
+    // DEBUG: 输出接收到的字段顺序
+    eprintln!("Rust接收fields键顺序: {:?}", fields.keys().collect::<Vec<_>>());
+
     let req = CreateSecretRequest {
         title,
         description: description.unwrap_or_default(),
@@ -76,6 +79,11 @@ pub fn update_secret(
     icon: Option<String>,
     favorite: Option<bool>,
 ) -> Result<SecretEntry, String> {
+    // DEBUG: 输出接收到的字段顺序
+    if let Some(ref f) = fields {
+        eprintln!("Rust update接收fields键顺序: {:?}", f.keys().collect::<Vec<_>>());
+    }
+
     let req = UpdateSecretRequest {
         id,
         title,
