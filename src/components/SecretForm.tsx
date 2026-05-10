@@ -130,18 +130,16 @@ export default function SecretForm() {
 
   const handleMouseEnter = (index: number) => {
     setHoveredIndex(index)
-    // 如果正在拖拽且悬停到不同字段，直接交换
-    if (draggedIndex !== null && draggedIndex !== index) {
-      const newFields = [...fields]
-      const temp = newFields[draggedIndex]
-      newFields[draggedIndex] = newFields[index]
-      newFields[index] = temp
-      setFields(newFields)
-      setDraggedIndex(index)
-    }
   }
 
   const handleMouseUp = () => {
+    // 放下时一次性移动：从 draggedIndex 移到 hoveredIndex
+    if (draggedIndex !== null && hoveredIndex !== null && draggedIndex !== hoveredIndex) {
+      const newFields = [...fields]
+      const [movedItem] = newFields.splice(draggedIndex, 1)
+      newFields.splice(hoveredIndex, 0, movedItem)
+      setFields(newFields)
+    }
     setDraggedIndex(null)
     setHoveredIndex(null)
   }

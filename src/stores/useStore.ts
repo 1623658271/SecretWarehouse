@@ -260,6 +260,8 @@ export const useStore = create<AppState>((set, get) => ({
         editingSecret: null,
       }))
       get().fetchAllTags()
+      get().fetchTagCounts()
+      get().fetchTotalCount()
     } catch (err) {
       set({ error: String(err), isLoading: false })
     }
@@ -283,6 +285,9 @@ export const useStore = create<AppState>((set, get) => ({
         isLoading: false,
       }))
       get().fetchAllTags()
+      get().fetchTagCounts()
+      get().fetchTotalCount()
+      get().fetchFavoritesCount()
       return secret
     } catch (err) {
       set({ error: String(err), isLoading: false })
@@ -300,6 +305,9 @@ export const useStore = create<AppState>((set, get) => ({
         isLoading: false,
       }))
       get().fetchAllTags()
+      get().fetchTagCounts()
+      get().fetchTotalCount()
+      get().fetchFavoritesCount()
     } catch (err) {
       set({ error: String(err), isLoading: false })
     }
@@ -317,6 +325,9 @@ export const useStore = create<AppState>((set, get) => ({
         isLoading: false,
       }))
       get().fetchAllTags()
+      get().fetchTagCounts()
+      get().fetchTotalCount()
+      get().fetchFavoritesCount()
       return count
     } catch (err) {
       set({ error: String(err), isLoading: false })
