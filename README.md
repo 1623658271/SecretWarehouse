@@ -116,7 +116,7 @@ SecretWarehouse
 
 <div align="center">
 
-![设置界面](../../../../MdBigImages/README/settings.png)![设置界面](../../../../MdBigImages/README/settings1.png)![设置界面](docs/images/settings2.png)
+![设置界面](docs/images/settings.png))![设置界面](docs/images/settings1.png)![设置界面](docs/images/settings2.png)
 
 *支持字体大小、卡片大小、间距、窗口尺寸等自定义设置*
 
