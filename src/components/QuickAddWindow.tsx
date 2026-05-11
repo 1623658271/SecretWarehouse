@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Plus, X, Eye, EyeOff, GripVertical, Save, Loader2 } from 'lucide-react'
 import { iconMap } from '../constants/icons'
 
@@ -45,6 +46,19 @@ export default function QuickAddWindow() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
+  const windowRef = useRef(getCurrentWindow())
+
+  // 标题栏拖动处理（备份方案）
+  const handleTitleMouseDown = async (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) {
+      return
+    }
+    try {
+      await windowRef.current.startDragging()
+    } catch (err) {
+      console.error('Failed to start dragging:', err)
+    }
+  }
 
   // 设置窗口位置
   const setWindowPosition = useCallback(async () => {
@@ -216,9 +230,10 @@ export default function QuickAddWindow() {
 
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-slate-900 overflow-hidden" style={{ borderRadius: '12px' }}>
-      {/* 标题栏 - 使用 data-tauri-drag-region 实现拖动（完全照搬 QuickSearchWindow） */}
+      {/* 标题栏 - 使用 data-tauri-drag-region + startDragging 双重保障 */}
       <div
         data-tauri-drag-region
+        onMouseDown={handleTitleMouseDown}
         className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 select-none cursor-move"
       >
         <div className="flex items-center gap-2" data-tauri-drag-region>
