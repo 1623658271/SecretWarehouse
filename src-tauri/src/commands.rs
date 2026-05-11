@@ -951,3 +951,4 @@ pub fn change_password_from_settings(
 }
 
 use crate::show_quick_search_window;
+use crate::show_quick_add_window;
