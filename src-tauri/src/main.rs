@@ -368,6 +368,7 @@ fn main() {
             commands::get_screen_size,
             commands::register_quick_search_shortcut,
             commands::unregister_quick_search_shortcut,
+            commands::register_quick_add_shortcut,
             commands::exit_app,
             commands::set_close_to_tray,
             commands::hide_main_window,

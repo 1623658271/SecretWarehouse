@@ -24,6 +24,10 @@ interface AppSettings {
   quickSearchPositionMode: string  // 'center' | 'custom'
   quickSearchCustomX: number  // 自定义X位置
   quickSearchCustomY: number  // 自定义Y位置
+  quickAddShortcut: string  // 快速添加快捷键
+  quickAddPositionMode: string  // 'center' | 'custom'
+  quickAddCustomX: number  // 自定义X位置
+  quickAddCustomY: number  // 自定义Y位置
 }
 
 const defaultSettings: AppSettings = {
@@ -45,6 +49,10 @@ const defaultSettings: AppSettings = {
   quickSearchPositionMode: 'center',
   quickSearchCustomX: 720,
   quickSearchCustomY: 340,
+  quickAddShortcut: 'CommandOrControl+Shift+A',
+  quickAddPositionMode: 'center',
+  quickAddCustomX: 720,
+  quickAddCustomY: 340,
 }
 
 // Load settings from localStorage

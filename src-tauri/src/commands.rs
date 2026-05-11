@@ -870,6 +870,26 @@ pub fn register_quick_search_shortcut(app_handle: tauri::AppHandle, shortcut: St
     }
 }
 
+/// 注册快速添加全局快捷键
+#[tauri::command]
+pub fn register_quick_add_shortcut(app_handle: tauri::AppHandle, shortcut: String) -> Result<(), String> {
+    // 先注销所有已注册的快捷键
+    let _ = app_handle.global_shortcut().unregister_all();
+
+    // 解析并注册新快捷键
+    if let Some(parsed) = parse_shortcut(&shortcut) {
+        let app_handle_clone = app_handle.clone();
+        app_handle.global_shortcut()
+            .on_shortcut(parsed, move |_app, _event, _shortcut| {
+                show_quick_add_window(&app_handle_clone);
+            })
+            .map_err(|e| format!("注册快捷键失败: {}", e))?;
+        Ok(())
+    } else {
+        Err(format!("无法解析快捷键: {}", shortcut))
+    }
+}
+
 /// 注销所有快速搜索快捷键
 #[tauri::command]
 pub fn unregister_quick_search_shortcut(app_handle: tauri::AppHandle) -> Result<(), String> {
