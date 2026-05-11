@@ -1336,12 +1336,9 @@ export default function Settings({ username }: SettingsProps) {
                   </p>
                 </div>
               )}
-            </CollapsibleSection>
 
-            {/* 快速添加浮窗 Section */}
-            <CollapsibleSection icon={Plus} title="快速添加浮窗">
-              {/* Quick Add Shortcut */}
-              <div>
+              {/* 快速添加快捷键 */}
+              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 mb-3">
                   <Key className="w-4 h-4 text-slate-400" />
                   <label className="text-sm text-slate-600 dark:text-slate-400">快速添加快捷键</label>
@@ -1371,11 +1368,11 @@ export default function Settings({ username }: SettingsProps) {
                 </p>
               </div>
 
-              {/* Quick Add Position */}
-              <div>
+              {/* 快速添加位置 */}
+              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 mb-3">
                   <Move className="w-4 h-4 text-slate-400" />
-                  <label className="text-sm text-slate-600 dark:text-slate-400">浮窗出现位置</label>
+                  <label className="text-sm text-slate-600 dark:text-slate-400">快速添加浮窗位置</label>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -1405,7 +1402,7 @@ export default function Settings({ username }: SettingsProps) {
 
               {/* Custom Position Picker for Quick Add */}
               {settings.quickAddPositionMode === 'custom' && (
-                <div className="space-y-2">
+                <div className="space-y-2 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                   <div className="flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-800 rounded-xl">
                     <div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">当前位置</div>
