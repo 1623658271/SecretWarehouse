@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, emit } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Plus, X, Eye, EyeOff, GripVertical, Save, Loader2 } from 'lucide-react'
+import { useStore } from '../stores/useStore'
 
 // 从 localStorage 读取设置
 function getSettings() {
