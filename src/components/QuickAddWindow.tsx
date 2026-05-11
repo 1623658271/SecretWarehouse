@@ -114,7 +114,7 @@ export default function QuickAddWindow() {
     }
     init()
 
-    // 监听 focus-input 事件
+    // 监听 focus-quick-add-input 事件
     const unlistenFocus = listen('focus-quick-add-input', async () => {
       resetForm()
       await setWindowPosition()
